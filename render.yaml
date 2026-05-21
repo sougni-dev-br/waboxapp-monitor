@@ -1,0 +1,41 @@
+# Render Blueprint para WaboxApp Monitor
+# Sobe: 1 web service Node + 1 Postgres
+# Uso: na Render, "New" → "Blueprint" → conecta repo Git → Render lê este arquivo.
+
+databases:
+  - name: waboxapp-db
+    databaseName: waboxapp
+    user: waboxapp
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: waboxapp-monitor
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pnpm install --frozen-lockfile=false && pnpm build
+    startCommand: node dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VITE_APP_BASE
+        value: /
+      - key: DATABASE_URL
+        fromDatabase:
+          name: waboxapp-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PANEL_PASSWORD
+        sync: false  # você define no dashboard Render manualmente
+      - key: COOKIE_PATH
+        value: /
+      - key: KEEP_ALIVE_ENABLED
+        value: "false"
+      - key: PGSSLMODE
+        value: require
