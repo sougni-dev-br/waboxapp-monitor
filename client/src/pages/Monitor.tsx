@@ -13,6 +13,7 @@ import { LabelsModal } from "@/components/LabelsModal";
 import { GlobalContactsView } from "@/components/GlobalContactsView";
 import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut } from "lucide-react";
 import { OperationalDash } from "@/components/OperationalDash";
+import { SougniLogo } from "@/components/SougniLogo";
 import { format } from "date-fns";
 
 interface Instance {
@@ -247,59 +248,58 @@ export default function Monitor() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white overflow-hidden">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <header className="flex-shrink-0 h-14 border-b border-gray-100 flex items-center px-5 gap-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gray-900 flex items-center justify-center">
-            <span className="text-white text-xs font-bold tracking-tight">W</span>
-          </div>
-          <span className="font-semibold text-gray-900 text-sm tracking-tight">WaboxApp Monitor</span>
-          <span className="text-gray-300 text-xs">by IRMZ</span>
-        </div>
+      <header className="flex-shrink-0 h-14 border-b border-border bg-card flex items-center px-5 gap-4">
+        <SougniLogo variant="full" size="sm" />
+        <span className="hidden md:inline text-xs text-muted-foreground border-l border-border pl-3 ml-1">
+          Painel de canais WhatsApp
+        </span>
 
         <div className="flex-1" />
 
         <div className="flex items-center gap-3">
           <StatusSummary instances={instances} />
-          <span className="text-xs text-gray-300 hidden sm:block">
+          <span className="text-xs text-muted-foreground hidden sm:block tabular">
             Atualizado às {format(lastUpdated, "HH:mm:ss")}
           </span>
           <button
             onClick={handleManualRefresh}
             title="Atualizar agora"
-            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <button
-          onClick={() => setShowLabels(true)}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100"
-        >
-          <Tag className="w-3.5 h-3.5" />
-          Marcadores
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowLabels(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
+          >
+            <Tag className="w-3.5 h-3.5" />
+            Marcadores
+          </button>
 
-        <button
-          onClick={() => setShowConfig(true)}
-          className="text-xs text-gray-500 hover:text-gray-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100"
-        >
-          Configurações
-        </button>
+          <button
+            onClick={() => setShowConfig(true)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
+          >
+            Configurações
+          </button>
 
-        <button
-          onClick={() => {
-            if (confirm("Deseja sair do painel?")) logoutMutation.mutate();
-          }}
-          disabled={logoutMutation.isPending}
-          title="Sair do painel"
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-600 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Sair
-        </button>
+          <button
+            onClick={() => {
+              if (confirm("Deseja sair do painel?")) logoutMutation.mutate();
+            }}
+            disabled={logoutMutation.isPending}
+            title="Sair do painel"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-3 py-1.5 rounded-lg hover:bg-destructive/5 disabled:opacity-50"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sair
+          </button>
+        </div>
       </header>
 
       {/* Corpo principal */}
@@ -413,12 +413,12 @@ function StatusSummary({ instances }: { instances: Instance[] }) {
   if (total === 0) return null;
   return (
     <div className="flex items-center gap-3 text-xs">
-      <span className="flex items-center gap-1.5 text-green-600">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+      <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
         {online} online
       </span>
       {offline > 0 && (
-        <span className="flex items-center gap-1.5 text-red-500">
+        <span className="flex items-center gap-1.5 text-red-500 font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block pulse-alert" />
           {offline} offline
         </span>

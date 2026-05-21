@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -40,77 +41,96 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
-  --primary: oklch(0.13 0 0);
-  --primary-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.13 0 0);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --chart-1: oklch(0.65 0.18 145);
-  --chart-2: oklch(0.58 0.22 27);
-  --chart-3: oklch(0.75 0.18 75);
-  --chart-4: oklch(0.60 0.15 220);
-  --chart-5: oklch(0.55 0.12 300);
-  --radius: 0.5rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.13 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.13 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.50 0 0);
-  --accent: oklch(0.96 0 0);
-  --accent-foreground: oklch(0.13 0 0);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.91 0 0);
-  --input: oklch(0.91 0 0);
-  --ring: oklch(0.70 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.13 0 0);
-  --sidebar-accent: oklch(0.96 0 0);
-  --sidebar-accent-foreground: oklch(0.13 0 0);
-  --sidebar-border: oklch(0.91 0 0);
-  --sidebar-ring: oklch(0.70 0 0);
+  /* ─── Sougni Brand Tokens ───────────────────────────────────────────────
+     Paleta clara estilo Anthropic / OpenAI, com accent verde-lima Sougni.
+  ─────────────────────────────────────────────────────────────────────── */
+
+  /* Brand */
+  --sougni-lime: #DFFF00;        /* Lime neon principal */
+  --sougni-lime-dim: #D0ED02;    /* Variação para hover/dark text on lime */
+  --sougni-lime-soft: #F4FFB3;   /* Lime suave para backgrounds */
+  --sougni-ink: #11131F;         /* Preto Sougni (texto e botões dark) */
+  --sougni-ink-soft: #2A2D3D;    /* Cinza muito escuro (texto secundário sobre claro) */
+
+  /* Surface */
+  --background: #FAFAF7;         /* Off-white estilo Anthropic */
+  --foreground: var(--sougni-ink);
+  --card: #FFFFFF;
+  --card-foreground: var(--sougni-ink);
+  --popover: #FFFFFF;
+  --popover-foreground: var(--sougni-ink);
+
+  /* Primary actions = preto Sougni */
+  --primary: var(--sougni-ink);
+  --primary-foreground: #FAFAF7;
+
+  /* Secondary / Muted */
+  --secondary: #F2F2EE;          /* Off-white levemente mais escuro */
+  --secondary-foreground: var(--sougni-ink);
+  --muted: #F2F2EE;
+  --muted-foreground: #6B6E7B;
+  --accent: #F2F2EE;
+  --accent-foreground: var(--sougni-ink);
+
+  /* States */
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --border: #E5E5E0;
+  --input: #E5E5E0;
+  --ring: var(--sougni-lime-dim);
+
+  /* Charts — neutros + lime de destaque */
+  --chart-1: var(--sougni-ink);         /* primário (linhas principais) */
+  --chart-2: var(--sougni-lime-dim);    /* destaque accent */
+  --chart-3: #6B6E7B;                   /* cinza médio */
+  --chart-4: #84A800;                   /* lime mais consolidado pra graphs */
+  --chart-5: #B8B8AE;                   /* cinza claro */
+
+  /* Sidebar */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: var(--sougni-ink);
+  --sidebar-primary: var(--sougni-ink);
+  --sidebar-primary-foreground: #FAFAF7;
+  --sidebar-accent: #F4FFB3;             /* lime soft para item hover/selected */
+  --sidebar-accent-foreground: var(--sougni-ink);
+  --sidebar-border: #E5E5E0;
+  --sidebar-ring: var(--sougni-lime-dim);
+
+  --radius: 0.625rem;
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --background: #11131F;
+  --foreground: #FAFAF7;
+  --card: #1A1D2A;
+  --card-foreground: #FAFAF7;
+  --popover: #1A1D2A;
+  --popover-foreground: #FAFAF7;
+  --primary: var(--sougni-lime);
+  --primary-foreground: var(--sougni-ink);
+  --secondary: #1A1D2A;
+  --secondary-foreground: #FAFAF7;
+  --muted: #1A1D2A;
+  --muted-foreground: #9B9EAB;
+  --accent: #1A1D2A;
+  --accent-foreground: #FAFAF7;
+  --destructive: #EF4444;
+  --destructive-foreground: #FAFAF7;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.10);
+  --ring: var(--sougni-lime);
+  --sidebar: #1A1D2A;
+  --sidebar-foreground: #FAFAF7;
+  --sidebar-primary: var(--sougni-lime);
+  --sidebar-primary-foreground: var(--sougni-ink);
+  --sidebar-accent: #2A2D3D;
+  --sidebar-accent-foreground: #FAFAF7;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: var(--sougni-lime);
 }
 
 @layer base {
@@ -122,16 +142,23 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
     line-height: 1.5;
+    font-feature-settings: "ss01", "cv11";
   }
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::selection {
+    background: var(--sougni-lime);
+    color: var(--sougni-ink);
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: oklch(85% 0 0); border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background: oklch(70% 0 0); }
+  ::-webkit-scrollbar-thumb { background: #D5D5CE; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #B8B8AE; }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -143,58 +170,77 @@
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
+  /* Tabelas / monoespaço */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 @layer utilities {
+  /* Bubbles de mensagem (in/out) */
   .msg-in {
-    background: oklch(0.96 0 0);
-    color: oklch(0.13 0 0);
-    border-radius: 2px 12px 12px 12px;
+    background: #F2F2EE;
+    color: var(--sougni-ink);
+    border-radius: 4px 14px 14px 14px;
   }
   .msg-out {
-    background: oklch(0.13 0 0);
-    color: oklch(0.98 0 0);
-    border-radius: 12px 2px 12px 12px;
+    background: var(--sougni-ink);
+    color: #FAFAF7;
+    border-radius: 14px 4px 14px 14px;
   }
+
+  /* Status dots */
   .dot-online {
-    background: oklch(0.65 0.18 145);
-    box-shadow: 0 0 0 2px oklch(0.90 0.1 145 / 0.4);
+    background: #10B981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
   }
   .dot-offline {
-    background: oklch(0.58 0.22 27);
+    background: #EF4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
   }
   .dot-unknown {
-    background: oklch(0.75 0 0);
+    background: #B8B8AE;
   }
+
+  /* Pulse */
   @keyframes pulse-alert {
-    0% { box-shadow: 0 0 0 0 oklch(0.58 0.22 27 / 0.4); }
-    70% { box-shadow: 0 0 0 8px oklch(0.58 0.22 27 / 0); }
-    100% { box-shadow: 0 0 0 0 oklch(0.58 0.22 27 / 0); }
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
   }
   .pulse-alert {
     animation: pulse-alert 1.5s ease-in-out infinite;
   }
+
+  /* Hover sutil de cards */
+  .card-hover {
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+  .card-hover:hover {
+    border-color: #D5D5CE;
+    box-shadow: 0 1px 2px rgba(17, 19, 31, 0.04), 0 1px 3px rgba(17, 19, 31, 0.03);
+  }
+
+  /* Accent lime para destaques (badges, focus rings, etc) */
+  .accent-lime {
+    background: var(--sougni-lime);
+    color: var(--sougni-ink);
+  }
+  .accent-lime-soft {
+    background: var(--sougni-lime-soft);
+    color: var(--sougni-ink);
+  }
+  .text-accent-lime {
+    color: #84A800; /* versão acessível em fundo claro */
+  }
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -205,16 +251,47 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
+  }
+
+  /* Logo Sougni (wordmark padrão) */
+  .sougni-wordmark {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--sougni-ink);
+  }
+
+  /* Botão primário com lime hover */
+  .btn-primary {
+    background: var(--sougni-ink);
+    color: #FAFAF7;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover {
+    background: #2A2D3D;
+  }
+
+  /* Botão accent lime */
+  .btn-accent {
+    background: var(--sougni-lime);
+    color: var(--sougni-ink);
+    transition: background 0.15s, transform 0.05s;
+  }
+  .btn-accent:hover {
+    background: var(--sougni-lime-dim);
+  }
+  .btn-accent:active {
+    transform: translateY(1px);
   }
 }

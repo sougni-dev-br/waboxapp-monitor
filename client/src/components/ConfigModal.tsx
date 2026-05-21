@@ -47,19 +47,19 @@ export function ConfigModal({ onClose, onSaved }: ConfigModalProps) {
   const hasChanges = token !== (config?.token ?? "");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-sm">
+      <div className="bg-card rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden border border-border">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
-              <Key className="w-3.5 h-3.5 text-gray-600" />
+            <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
+              <Key className="w-3.5 h-3.5 text-foreground" />
             </div>
-            <h2 className="text-sm font-semibold text-gray-900">Configurações da API</h2>
+            <h2 className="text-sm font-semibold text-foreground">Configurações da integração</h2>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Fechar"
           >
             <X className="w-4 h-4" />
@@ -70,10 +70,10 @@ export function ConfigModal({ onClose, onSaved }: ConfigModalProps) {
         <div className="px-6 py-5 space-y-5">
           {/* Token */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              Token da API WaboxApp
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Chave de API do provedor
               {config?.hasToken && !isLoading && (
-                <span className="ml-2 text-[10px] font-normal text-emerald-600">● configurado</span>
+                <span className="ml-2 text-[10px] font-normal text-emerald-600">● configurada</span>
               )}
             </label>
             <div className="relative">
@@ -81,42 +81,43 @@ export function ConfigModal({ onClose, onSaved }: ConfigModalProps) {
                 type={showToken ? "text" : "password"}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder={isLoading ? "Carregando..." : "Cole seu token da API"}
+                placeholder={isLoading ? "Carregando..." : "Cole sua chave da API"}
                 disabled={isLoading}
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full pl-3.5 pr-10 py-2.5 text-sm font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 transition-colors disabled:bg-gray-50"
+                className="w-full pl-3.5 pr-10 py-2.5 text-sm font-mono bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-foreground/10 focus:border-foreground/30 transition-colors disabled:bg-muted"
               />
               <button
                 type="button"
                 onClick={() => setShowToken((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-700 rounded transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded transition-colors"
                 aria-label={showToken ? "Ocultar token" : "Mostrar token"}
               >
                 {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-1.5">
-              Encontre seu token em{" "}
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Encontre sua chave no painel do{" "}
               <a
                 href="https://www.waboxapp.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-600 underline inline-flex items-center gap-0.5"
+                className="text-foreground underline inline-flex items-center gap-0.5"
               >
-                waboxapp.com
+                provedor
                 <ExternalLink className="w-3 h-3" />
               </a>
+              {" "}de mensageria WhatsApp.
             </p>
           </div>
 
           {/* Webhook URL */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-              URL do Webhook (configure no WaboxApp)
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              URL do Webhook
             </label>
             <div className="flex items-center gap-2">
-              <div className="flex-1 px-3.5 py-2.5 text-xs text-gray-700 bg-gray-50 border border-gray-100 rounded-lg font-mono truncate select-all">
+              <div className="flex-1 px-3.5 py-2.5 text-xs text-foreground bg-muted border border-border rounded-lg font-mono truncate select-all">
                 {webhookUrl}
               </div>
               <button
@@ -124,7 +125,7 @@ export function ConfigModal({ onClose, onSaved }: ConfigModalProps) {
                 className={`flex-shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center transition-colors ${
                   copied
                     ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                    : "border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
                 title="Copiar URL"
                 aria-label="Copiar URL do webhook"
@@ -132,35 +133,35 @@ export function ConfigModal({ onClose, onSaved }: ConfigModalProps) {
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-1.5">
-              Cole esta URL em cada instância no painel WaboxApp para receber mensagens em tempo real.
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Cole esta URL no campo de webhook de cada canal no painel do provedor.
             </p>
           </div>
 
           {/* Instruções */}
-          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-            <p className="text-xs font-medium text-gray-700">Como configurar:</p>
-            <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
-              <li>Acesse waboxapp.com e copie seu token de API</li>
-              <li>Cole o token acima e clique em Salvar</li>
-              <li>Copie a URL do webhook e configure em cada instância no WaboxApp</li>
-              <li>Use o botão <strong>Adicionar instância</strong> na barra lateral para cadastrar números</li>
+          <div className="bg-muted rounded-xl p-4 space-y-2 border border-border">
+            <p className="text-xs font-medium text-foreground">Como configurar:</p>
+            <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+              <li>Acesse o painel do provedor e copie sua chave da API</li>
+              <li>Cole a chave acima e clique em Salvar</li>
+              <li>Copie a URL do webhook e configure em cada canal no provedor</li>
+              <li>Use o botão <strong className="text-foreground">Adicionar instância</strong> na barra lateral para cadastrar números</li>
             </ol>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100">
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/30">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={() => saveMutation.mutate({ token: token.trim() })}
             disabled={!token.trim() || saveMutation.isPending || !hasChanges}
-            className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-medium btn-primary rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saveMutation.isPending ? "Salvando..." : hasChanges ? "Salvar" : "Sem alterações"}
           </button>

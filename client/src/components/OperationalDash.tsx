@@ -470,7 +470,7 @@ export function OperationalDash() {
   // ─── Loading State ──────────────────────────────────────────────
   if (overviewLoading) {
     return (
-      <div className="h-full overflow-y-auto bg-[#FAFAFA] p-6 space-y-5">
+      <div className="h-full overflow-y-auto bg-background p-6 space-y-5">
         <div className="flex items-center justify-between mb-2">
           <Skeleton className="h-7 w-56" />
           <Skeleton className="h-9 w-52" />
@@ -490,7 +490,7 @@ export function OperationalDash() {
 
   if (!overview) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#FAFAFA]">
+      <div className="h-full flex items-center justify-center bg-background">
         <div className="text-center space-y-2">
           <AlertTriangle className="h-8 w-8 text-gray-300 mx-auto" />
           <p className="text-sm text-gray-400">Erro ao carregar dados</p>
@@ -503,7 +503,7 @@ export function OperationalDash() {
   const timeStr = lastUpdate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   return (
-    <div className="h-full overflow-y-auto bg-[#FAFAFA]">
+    <div className="h-full overflow-y-auto bg-background">
       <div className="max-w-[1400px] mx-auto p-6 space-y-5">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}

@@ -142,7 +142,7 @@ export const appRouter = router({
         if (!config?.token) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Configure o token da API WaboxApp primeiro.",
+            message: "Configure a chave da API primeiro em Configurações.",
           });
         }
 
@@ -441,7 +441,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const config = await getApiConfig(OWNER_ID);
         if (!config?.token) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure o token da API WaboxApp primeiro." });
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure a chave da API primeiro em Configurações." });
         }
 
         const allInstances = await getInstances(OWNER_ID);

@@ -109,7 +109,7 @@ export function AnalyticsPanel({ instanceId, instanceAlias }: AnalyticsPanelProp
           <div className="h-48 flex flex-col items-center justify-center text-center">
             <BarChart className="w-8 h-8 text-gray-200 mb-2" />
             <p className="text-xs text-gray-400">Nenhum dado disponível.</p>
-            <p className="text-xs text-gray-300 mt-1">As conversas aparecerão aqui via webhook.</p>
+            <p className="text-xs text-gray-300 mt-1">As conversas aparecerão aqui assim que chegarem.</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={180}>

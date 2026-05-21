@@ -83,10 +83,10 @@ export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
             />
           </div>
 
-          <div className="bg-blue-50 rounded-xl p-3.5">
-            <p className="text-xs text-blue-600 leading-relaxed">
-              O sistema verificará o status da instância imediatamente após o cadastro.
-              Certifique-se de que o número está conectado ao WaboxApp.
+          <div className="rounded-xl p-3.5" style={{ background: "var(--sougni-lime-soft)", borderColor: "var(--sougni-lime-dim)" }}>
+            <p className="text-xs leading-relaxed" style={{ color: "var(--sougni-ink)" }}>
+              O sistema verificará o status do canal imediatamente após o cadastro.
+              Certifique-se de que o número está conectado ao provedor.
             </p>
           </div>
 

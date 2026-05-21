@@ -180,7 +180,7 @@ describe("instances router", () => {
   it("lança erro ao adicionar instância sem token configurado", async () => {
     vi.mocked(getApiConfig).mockResolvedValue(undefined);
     const caller = appRouter.createCaller(makeAuthedCtx());
-    await expect(caller.instances.add({ uid: "5511999999999" })).rejects.toThrow("Configure o token");
+    await expect(caller.instances.add({ uid: "5511999999999" })).rejects.toThrow("Configure a chave");
   });
 
   it("lança erro ao adicionar instância duplicada", async () => {
@@ -235,7 +235,7 @@ describe("messages.send router", () => {
   it("lança erro ao enviar sem token configurado", async () => {
     vi.mocked(getApiConfig).mockResolvedValue(undefined);
     const caller = appRouter.createCaller(makeAuthedCtx());
-    await expect(caller.messages.send({ instanceId: 1, contactId: 5, contactUid: "5511888888888", text: "Oi" })).rejects.toThrow("Configure o token");
+    await expect(caller.messages.send({ instanceId: 1, contactId: 5, contactUid: "5511888888888", text: "Oi" })).rejects.toThrow("Configure a chave");
   });
 
   it("lança erro ao enviar para instância offline", async () => {
