@@ -440,40 +440,43 @@ function EmptyState({
 }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-      <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-5">
-        <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div
+        className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
+        style={{ background: "var(--sougni-lime-soft)" }}
+      >
+        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: "var(--sougni-ink)" }}>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
             d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
       </div>
-      <h2 className="text-base font-semibold text-gray-900 mb-1.5">
-        {!hasConfig ? "Configure sua API" : "Selecione uma instância"}
+      <h2 className="text-base font-semibold text-foreground mb-1.5">
+        {!hasConfig ? "Configure a integração" : "Selecione um canal"}
       </h2>
-      <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
+      <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
         {!hasConfig
-          ? "Adicione seu token WaboxApp para começar a monitorar suas instâncias WhatsApp."
-          : "Escolha uma instância na barra lateral para ver os contatos e conversas."}
+          ? "Adicione sua chave de API do provedor de mensageria para começar a monitorar seus canais WhatsApp."
+          : "Escolha um canal na barra lateral para ver os contatos e conversas."}
       </p>
       <div className="flex gap-2 mt-5 flex-wrap justify-center">
         {!hasConfig && (
           <button
             onClick={onConfig}
-            className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 btn-primary text-sm rounded-lg"
           >
-            Configurar Token
+            Configurar chave
           </button>
         )}
         {hasConfig && (
           <>
             <button
               onClick={onAdd}
-              className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 btn-primary text-sm rounded-lg"
             >
-              Adicionar Instância
+              Adicionar canal
             </button>
             <button
               onClick={onGlobal}
-              className="px-4 py-2 border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+              className="px-4 py-2 border border-border text-foreground text-sm rounded-lg hover:bg-muted transition-colors flex items-center gap-1.5"
             >
               <Globe className="w-3.5 h-3.5" />
               Ver Todos os Contatos
