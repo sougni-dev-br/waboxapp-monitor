@@ -58,13 +58,15 @@ export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
             <input
               type="text"
               value={uid}
-              onChange={(e) => setUid(e.target.value)}
-              placeholder="Ex: 5511999999999"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 transition-colors"
+              onChange={(e) => setUid(e.target.value.replace(/\D/g, ""))}
+              placeholder="Ex: 5561999998888"
+              inputMode="numeric"
+              autoComplete="off"
+              className="w-full px-3.5 py-2.5 text-sm font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 transition-colors"
               required
             />
             <p className="text-xs text-gray-400 mt-1">
-              Formato internacional sem + ou espaços. Ex: 5511999999999
+              Só dígitos, formato internacional sem + ou espaços. Brasil: 55 + DDD + número.
             </p>
           </div>
 

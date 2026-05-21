@@ -15,6 +15,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { formatPhoneUid } from "@/lib/formatPhone";
 
 interface Instance {
   id: number;
@@ -92,9 +93,9 @@ export function InstanceDetailPanel({
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-900">
-              {instance.alias || instance.uid}
+              {instance.alias || formatPhoneUid(instance.uid)}
             </h3>
-            <p className="text-xs text-gray-400">{instance.uid}</p>
+            <p className="text-xs text-gray-400" title={instance.uid}>{formatPhoneUid(instance.uid)}</p>
           </div>
         </div>
 
@@ -135,17 +136,20 @@ export function InstanceDetailPanel({
             <span className="text-xs text-gray-600 capitalize">{instance.platform}</span>
           </div>
         )}
-        {instance.locale && (
+        {instance.locale && instance.locale !== "-" && (
           <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
             <Globe className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-xs text-gray-600">{instance.locale}</span>
           </div>
         )}
         {instance.lastCheckedAt && (
-          <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+          <div
+            className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2"
+            title={`Última verificação: ${format(new Date(instance.lastCheckedAt), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}`}
+          >
             <Clock className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-xs text-gray-600">
-              {format(new Date(instance.lastCheckedAt), "HH:mm", { locale: ptBR })}
+              Verificado às {format(new Date(instance.lastCheckedAt), "HH:mm", { locale: ptBR })}
             </span>
           </div>
         )}

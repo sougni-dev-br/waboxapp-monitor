@@ -11,7 +11,7 @@ import { ConfigModal } from "@/components/ConfigModal";
 import { AddInstanceModal } from "@/components/AddInstanceModal";
 import { LabelsModal } from "@/components/LabelsModal";
 import { GlobalContactsView } from "@/components/GlobalContactsView";
-import { BarChart2, MessageCircle, Tag, RefreshCw, Globe } from "lucide-react";
+import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut } from "lucide-react";
 import { OperationalDash } from "@/components/OperationalDash";
 import { format } from "date-fns";
 
@@ -47,6 +47,9 @@ type CenterView = "contacts" | "analytics" | "global" | "dashboard";
 export default function Monitor() {
   const { data: authUser } = trpc.auth.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
   const { playAlert } = useAlertSound();
+  const logoutMutation = trpc.auth.logout.useMutation({
+    onSuccess: () => window.location.reload(),
+  });
 
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -235,6 +238,18 @@ export default function Monitor() {
           className="text-xs text-gray-500 hover:text-gray-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100"
         >
           Configurações
+        </button>
+
+        <button
+          onClick={() => {
+            if (confirm("Deseja sair do painel?")) logoutMutation.mutate();
+          }}
+          disabled={logoutMutation.isPending}
+          title="Sair do painel"
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-600 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Sair
         </button>
       </header>
 

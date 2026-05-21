@@ -9,6 +9,7 @@ import { Search, Download, MessageCircle, Users, User, Globe } from "lucide-reac
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FilterBar } from "./FilterBar";
+import { formatPhoneUid } from "@/lib/formatPhone";
 
 interface Contact {
   id: number;
@@ -156,21 +157,21 @@ function GlobalContactItem({ contact, onClick }: { contact: Contact; onClick: ()
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-gray-900 truncate">
-            {contact.name || contact.uid}
+          <span className="text-sm font-medium text-gray-900 truncate" title={contact.name ?? contact.uid}>
+            {contact.name || formatPhoneUid(contact.uid)}
           </span>
           {contact.lastMessageAt && (
-            <span className="text-xs text-gray-400 flex-shrink-0">
+            <span className="text-xs text-gray-400 flex-shrink-0" title={format(new Date(contact.lastMessageAt), "dd/MM/yyyy HH:mm")}>
               {formatRelativeDate(contact.lastMessageAt)}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {/* Instância de origem */}
-          <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">
+          <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium" title={instanceLabel}>
             {instanceLabel}
           </span>
-          <span className="text-xs text-gray-400 truncate">{contact.uid}</span>
+          <span className="text-xs text-gray-400 truncate" title={contact.uid}>{formatPhoneUid(contact.uid)}</span>
           <span className="text-gray-200">·</span>
           <span className="text-xs text-gray-400">{contact.messageCount} msgs</span>
           {contact.firstMessageAt && (

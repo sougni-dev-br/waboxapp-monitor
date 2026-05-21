@@ -33,11 +33,11 @@ export function OfflineAlert({ alerts, onDismiss }: OfflineAlertProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900">Instância Offline</p>
-              <p className="text-xs text-gray-500 mt-0.5 truncate">
+              <p className="text-xs text-gray-500 mt-0.5 truncate" title={alert.uid}>
                 {alert.alias || alert.uid}
               </p>
               <p className="text-xs text-red-400 mt-1">
-                {alert.uid} · {formatTime(alert.offlineSince)}
+                {alert.alias ? `${alert.uid} · ` : ""}desde {formatTime(alert.offlineSince)}
               </p>
             </div>
             <button

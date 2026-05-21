@@ -39,9 +39,8 @@ import {
   Bar,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { formatPhoneUid } from "@/lib/formatPhone";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
@@ -136,7 +135,8 @@ interface KPICardProps {
 
 function KPICard({ title, value, variation, variationLabel = "vs ontem", icon, iconBg = "bg-gray-50", suffix, delay = 0 }: KPICardProps) {
   const isPositive = variation !== undefined && variation >= 0;
-  const hasVariation = variation !== undefined;
+  // Mostra variação só se houver dado significativo (não mostrar "+0.0%" para tudo zerado)
+  const hasVariation = variation !== undefined && (value > 0 || Math.abs(variation) > 0.05);
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -618,11 +618,25 @@ export function OperationalDash() {
             title="Instâncias Online"
             value={overview.instancesOnline}
             suffix={`/${overview.instancesTotal}`}
-            iconBg={overview.instancesOnline === overview.instancesTotal ? "bg-emerald-50" : "bg-red-50"}
+            iconBg={
+              overview.instancesTotal === 0
+                ? "bg-gray-100"
+                : overview.instancesOnline === overview.instancesTotal
+                ? "bg-emerald-50"
+                : overview.instancesOnline === 0
+                ? "bg-red-50"
+                : "bg-amber-50"
+            }
             icon={
-              overview.instancesOnline === overview.instancesTotal
-                ? <Wifi className="h-5 w-5 text-emerald-600" />
-                : <WifiOff className="h-5 w-5 text-red-500" />
+              overview.instancesTotal === 0 ? (
+                <Wifi className="h-5 w-5 text-gray-400" />
+              ) : overview.instancesOnline === overview.instancesTotal ? (
+                <Wifi className="h-5 w-5 text-emerald-600" />
+              ) : overview.instancesOnline === 0 ? (
+                <WifiOff className="h-5 w-5 text-red-500" />
+              ) : (
+                <Wifi className="h-5 w-5 text-amber-600" />
+              )
             }
             delay={0.15}
           />
@@ -856,7 +870,7 @@ export function OperationalDash() {
                               <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? "bg-emerald-500" : "bg-red-400"}`} />
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{inst.alias}</p>
-                                <p className="text-[10px] text-gray-400">{inst.uid}</p>
+                                <p className="text-[10px] text-gray-400" title={inst.uid}>{formatPhoneUid(inst.uid)}</p>
                               </div>
                             </div>
                           </TableCell>
@@ -900,7 +914,7 @@ export function OperationalDash() {
         </motion.div>
 
         {/* ── Rodapé ─────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-center gap-2 pb-2 text-[10px] text-gray-300">
+        <div className="flex items-center justify-center gap-2 pb-2 text-[11px] text-gray-400">
           <RefreshCw className="h-3 w-3" />
           <span>Atualização automática a cada 60 segundos</span>
         </div>

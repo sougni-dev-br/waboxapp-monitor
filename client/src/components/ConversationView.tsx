@@ -4,6 +4,7 @@ import { ArrowLeft, User, Users, Image, FileText, MapPin, Mic, Video, Phone, Sen
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { formatPhoneUid } from "@/lib/formatPhone";
 
 interface Instance {
   id: number;
@@ -144,14 +145,25 @@ export function ConversationView({ instance, contact, onBack }: ConversationView
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">
-            {contact.name || contact.uid}
+          <p className="text-sm font-semibold text-gray-900 truncate" title={contact.name ?? contact.uid}>
+            {contact.name || formatPhoneUid(contact.uid)}
           </p>
-          <p className="text-xs text-gray-400 truncate">{contact.uid}</p>
+          <p className="text-xs text-gray-400 truncate" title={contact.uid}>{formatPhoneUid(contact.uid)}</p>
         </div>
 
-        <div className="text-xs text-gray-400">
-          {messages.length} mensagem{messages.length !== 1 ? "s" : ""}
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <span>{messages.length} mensage{messages.length === 1 ? "m" : "ns"}</span>
+          {instance.status === "online" ? (
+            <span className="flex items-center gap-1 text-emerald-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              online
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-red-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              offline
+            </span>
+          )}
         </div>
       </div>
 

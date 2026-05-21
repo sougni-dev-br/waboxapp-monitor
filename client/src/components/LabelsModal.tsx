@@ -124,7 +124,7 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
             <div className="space-y-4">
               {/* Explicação */}
               <p className="text-xs text-gray-400 leading-relaxed">
-                Marcadores são aplicados automaticamente quando qualquer uma das <strong>4 primeiras mensagens recebidas</strong> de um novo contato corresponde a uma regra. Cada contato recebe apenas um marcador.
+                Marcadores são aplicados automaticamente quando qualquer uma das <strong>4 primeiras mensagens recebidas</strong> de um novo contato corresponde a uma regra. Um contato pode receber <strong>múltiplos marcadores</strong> se atender a várias regras.
               </p>
 
               {/* Form de criação */}
@@ -215,7 +215,7 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
                 <div className="flex items-start gap-2">
                   <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700 leading-relaxed">
-                    Quando um <strong>novo contato</strong> envia mensagem, o sistema verifica as regras nas <strong>4 primeiras mensagens recebidas</strong> e aplica o primeiro marcador que corresponder.
+                    Quando um <strong>novo contato</strong> envia mensagem, o sistema verifica as regras nas <strong>4 primeiras mensagens recebidas</strong> e aplica <strong>todos os marcadores</strong> cujas regras corresponderem.
                   </p>
                 </div>
               </div>
@@ -383,7 +383,7 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-xs text-gray-400">Regras são aplicadas em ordem de criação (primeira que corresponder vence).</p>
+                  <p className="text-xs text-gray-400">Todas as regras são verificadas — o contato recebe cada marcador cuja regra casar.</p>
                   {rules.map((rule, index) => {
                     const label = labels.find((l) => l.id === rule.labelId);
                     return (

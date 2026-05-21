@@ -8,11 +8,10 @@
  * Converte automaticamente entre DD/MM/AAAA (input do usuário) e YYYY-MM-DD (valor para a query).
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { CalendarRange, Tag, X, Filter, ChevronDown } from "lucide-react";
-import { format, parse, isValid } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { format, parse, isValid, subDays } from "date-fns";
 
 interface FilterBarProps {
   /** Valor atual da data inicial em YYYY-MM-DD (ou undefined) */
@@ -69,6 +68,25 @@ export function FilterBar({ dateFrom, dateTo, labelId, onChange, count, total }:
 
   const hasActiveFilter = !!(dateFrom || dateTo || labelId != null);
   const selectedLabel = labels.find((l) => l.id === labelId);
+
+  // Placeholders dinâmicos: 1º de janeiro / hoje do ano corrente
+  const placeholders = useMemo(() => {
+    const now = new Date();
+    return {
+      from: `01/01/${now.getFullYear()}`,
+      to: format(now, "dd/MM/yyyy"),
+    };
+  }, []);
+
+  function applyPreset(days: number) {
+    const today = new Date();
+    const from = subDays(today, days);
+    onChange({
+      dateFrom: format(from, "yyyy-MM-dd"),
+      dateTo: format(today, "yyyy-MM-dd"),
+      labelId,
+    });
+  }
 
   // Sincroniza inputs quando props mudam externamente
   useEffect(() => { setFromInput(toBR(dateFrom)); }, [dateFrom]);
@@ -225,13 +243,32 @@ export function FilterBar({ dateFrom, dateTo, labelId, onChange, count, total }:
             <CalendarRange className="w-3.5 h-3.5 text-gray-400" />
             Data de entrada da primeira mensagem
           </p>
+          {/* Atalhos rápidos */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] text-gray-400 mr-1">Rápido:</span>
+            {[
+              { label: "Hoje", days: 0 },
+              { label: "7d", days: 7 },
+              { label: "30d", days: 30 },
+              { label: "90d", days: 90 },
+            ].map(({ label, days }) => (
+              <button
+                key={label}
+                onClick={() => applyPreset(days)}
+                className="px-2 py-0.5 text-[11px] font-medium bg-white text-gray-600 border border-gray-200 rounded hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">De (DD/MM/AAAA)</label>
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="01/01/2025"
+                placeholder={placeholders.from}
                 value={fromInput}
                 onChange={(e) => handleFromChange(e.target.value)}
                 maxLength={10}
@@ -243,7 +280,7 @@ export function FilterBar({ dateFrom, dateTo, labelId, onChange, count, total }:
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="31/12/2025"
+                placeholder={placeholders.to}
                 value={toInput}
                 onChange={(e) => handleToChange(e.target.value)}
                 maxLength={10}

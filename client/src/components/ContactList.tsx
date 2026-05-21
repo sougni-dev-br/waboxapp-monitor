@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { InstanceDetailPanel } from "./InstanceDetailPanel";
 import { FilterBar } from "./FilterBar";
+import { formatPhoneUid } from "@/lib/formatPhone";
 
 interface Instance {
   id: number;
@@ -151,9 +152,11 @@ export function ContactList({
 
 function ContactItem({ contact, onClick }: { contact: Contact; onClick: () => void }) {
   const Icon = contact.type === "group" ? Users : User;
+  const msgLabel = contact.messageCount === 1 ? "msg" : "msgs";
   return (
     <button
       onClick={onClick}
+      title={`${contact.name ? `${contact.name} · ` : ""}${contact.uid}`}
       className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left"
     >
       <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
@@ -162,22 +165,22 @@ function ContactItem({ contact, onClick }: { contact: Contact; onClick: () => vo
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-gray-900 truncate">
-            {contact.name || contact.uid}
+            {contact.name || formatPhoneUid(contact.uid)}
           </span>
           {contact.lastMessageAt && (
-            <span className="text-xs text-gray-400 flex-shrink-0">
+            <span className="text-xs text-gray-400 flex-shrink-0" title={format(new Date(contact.lastMessageAt), "dd/MM/yyyy HH:mm")}>
               {formatRelativeDate(contact.lastMessageAt)}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <span className="text-xs text-gray-400 truncate">{contact.uid}</span>
+          <span className="text-xs text-gray-400 truncate">{formatPhoneUid(contact.uid)}</span>
           <span className="text-gray-200">·</span>
-          <span className="text-xs text-gray-400">{contact.messageCount} msgs</span>
+          <span className="text-xs text-gray-400">{contact.messageCount} {msgLabel}</span>
           {contact.firstMessageAt && (
             <>
               <span className="text-gray-200">·</span>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400" title={`Primeira mensagem: ${format(new Date(contact.firstMessageAt), "dd/MM/yyyy HH:mm")}`}>
                 Entrada: {format(new Date(contact.firstMessageAt), "dd/MM/yy", { locale: ptBR })}
               </span>
             </>

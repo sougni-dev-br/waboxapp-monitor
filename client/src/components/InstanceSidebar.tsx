@@ -155,9 +155,13 @@ function InstanceItem({
   const isOnline = instance.status === "online";
   const isOffline = instance.status === "offline";
 
+  const displayName = instance.alias || instance.uid;
+  const tooltipText = instance.alias ? `${instance.alias} · ${instance.uid}` : instance.uid;
+
   return (
     <button
       onClick={onClick}
+      title={tooltipText}
       className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all group ${
         isSelected
           ? "bg-gray-100 shadow-sm"
@@ -176,6 +180,7 @@ function InstanceItem({
           className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
             isOnline ? "bg-emerald-500" : isOffline ? "bg-red-400" : "bg-gray-300"
           } ${hasAlert ? "pulse-alert" : ""}`}
+          aria-label={isOnline ? "online" : isOffline ? "offline" : "desconhecido"}
         />
       </div>
 
@@ -183,7 +188,7 @@ function InstanceItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1">
           <span className={`text-sm font-medium truncate ${isSelected ? "text-gray-900" : "text-gray-700"}`}>
-            {instance.alias || instance.uid}
+            {displayName}
           </span>
           {instance.battery !== null && instance.battery !== undefined && (
             <BatteryIndicator battery={instance.battery} plugged={instance.plugged ?? false} />
@@ -196,7 +201,7 @@ function InstanceItem({
             {isOnline ? "Ativo" : isOffline ? "Offline" : "—"}
           </span>
           {instance.platform && (
-            <span className="text-[11px] text-gray-400">· {instance.platform}</span>
+            <span className="text-[11px] text-gray-400 capitalize">· {instance.platform}</span>
           )}
         </div>
       </div>
