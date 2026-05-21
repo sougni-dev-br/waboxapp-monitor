@@ -6,7 +6,7 @@ databases:
   - name: waboxapp-db
     databaseName: waboxapp
     user: waboxapp
-    plan: free
+    plan: basic-256mb  # Starter ~$6/mês — Render só permite 1 free por conta
     region: oregon
     postgresMajorVersion: "16"
 
