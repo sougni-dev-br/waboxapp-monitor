@@ -95,7 +95,33 @@ export default function Monitor() {
 
   const handleStatusChanged = useCallback(
     (data: unknown) => {
-      const ev = data as { instanceId: number; uid: string; alias?: string; status: string; prevStatus: string };
+      const ev = data as {
+        instanceId: number;
+        uid: string;
+        alias?: string;
+        status: "online" | "offline" | "unknown";
+        prevStatus: string;
+        battery?: string;
+        plugged?: string;
+        platform?: string;
+      };
+      // Optimistic: aplica direto no cache pra refletir sem esperar o refetch
+      utils.instances.list.setData(undefined, (old) =>
+        old?.map((inst) =>
+          inst.id === ev.instanceId
+            ? {
+                ...inst,
+                status: ev.status,
+                alias: ev.alias ?? inst.alias,
+                platform: ev.platform ?? inst.platform,
+                battery: ev.battery ? parseInt(ev.battery, 10) : inst.battery,
+                plugged: ev.plugged !== undefined ? ev.plugged === "1" : inst.plugged,
+                lastCheckedAt: new Date(),
+                lastOnlineAt: ev.status === "online" ? new Date() : inst.lastOnlineAt,
+              }
+            : inst
+        )
+      );
       utils.instances.list.invalidate();
       utils.dashboard.overview.invalidate();
       utils.dashboard.realtime.invalidate();
@@ -113,6 +139,33 @@ export default function Monitor() {
       }
     },
     [utils, playAlert]
+  );
+
+  // Atualizações de rotina (bateria/plugged sem mudança de status)
+  const handleStatusUpdate = useCallback(
+    (data: unknown) => {
+      const ev = data as {
+        instanceId: number;
+        status?: string;
+        battery?: string;
+        plugged?: string;
+      };
+      utils.instances.list.setData(undefined, (old) =>
+        old?.map((inst) =>
+          inst.id === ev.instanceId
+            ? {
+                ...inst,
+                battery: ev.battery ? parseInt(ev.battery, 10) : inst.battery,
+                plugged: ev.plugged !== undefined ? ev.plugged === "1" : inst.plugged,
+                lastCheckedAt: new Date(),
+              }
+            : inst
+        )
+      );
+      utils.dashboard.realtime.invalidate();
+      setLastUpdated(new Date());
+    },
+    [utils]
   );
 
   const handleNewMessage = useCallback(
@@ -143,11 +196,7 @@ export default function Monitor() {
     enabled: !!authUser?.id,
     onEvent: {
       instance_status_changed: handleStatusChanged,
-      instance_status_update: () => {
-        utils.instances.list.invalidate();
-        utils.dashboard.realtime.invalidate();
-        setLastUpdated(new Date());
-      },
+      instance_status_update: handleStatusUpdate,
       new_message: handleNewMessage,
       dashboard_refresh: handleDashboardRefresh,
     },

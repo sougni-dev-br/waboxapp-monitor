@@ -45,8 +45,28 @@ export function InstanceDetailPanel({
   const utils = trpc.useUtils();
 
   const checkMutation = trpc.instances.checkStatus.useMutation({
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       toast.success(`Status: ${data.status === "online" ? "✅ Online" : "❌ Offline"}`);
+      // Optimistic update: atualiza o cache imediatamente para o painel refletir sem refresh
+      const newStatus = data.status as "online" | "offline" | "unknown";
+      utils.instances.list.setData(undefined, (old) =>
+        old?.map((inst) =>
+          inst.id === variables.id
+            ? {
+                ...inst,
+                status: newStatus,
+                alias: data.alias ?? inst.alias,
+                platform: data.platform ?? inst.platform,
+                battery: data.battery ? parseInt(data.battery, 10) : inst.battery,
+                plugged: data.plugged !== undefined ? data.plugged === "1" : inst.plugged,
+                locale: data.locale ?? inst.locale,
+                lastCheckedAt: new Date(),
+                lastOnlineAt: newStatus === "online" ? new Date() : inst.lastOnlineAt,
+              }
+            : inst
+        )
+      );
+      // Em seguida, invalida pra sincronizar caso o backend tenha mudado outras coisas
       utils.instances.list.invalidate();
       onRefreshed();
     },
