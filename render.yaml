@@ -14,7 +14,7 @@ services:
   - type: web
     name: waboxapp-monitor
     runtime: node
-    plan: free
+    plan: starter   # $7/mês — não dorme, crítico pra webhooks WhatsApp
     region: oregon
     branch: main
     buildCommand: pnpm install --frozen-lockfile=false && pnpm build
