@@ -19,6 +19,7 @@ import {
   RefreshCw,
   BarChart2,
   Tag,
+  Smartphone,
   CalendarIcon,
   X,
 } from "lucide-react";
@@ -442,6 +443,11 @@ export function OperationalDash() {
     [overview?.labelDistribution]
   );
 
+  const totalOperationLeads = useMemo(
+    () => overview?.operationDistribution?.reduce((acc, o) => acc + o.count, 0) ?? 0,
+    [overview?.operationDistribution]
+  );
+
   const heatmapData = useMemo(() => {
     if (!overview?.hourlyHeatmap) return [];
     const maxCount = Math.max(...overview.hourlyHeatmap.map((h) => h.count), 1);
@@ -713,7 +719,7 @@ export function OperationalDash() {
             </Card>
           </motion.div>
 
-          {/* Gráfico de Etiquetas */}
+          {/* Gráfico de Leads por Operação */}
           <motion.div
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
@@ -722,38 +728,45 @@ export function OperationalDash() {
           >
             <Card className="border border-gray-100 bg-white h-full">
               <CardHeader className="pb-1 pt-5 px-5">
-                <div className="flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-gray-400" />
-                  <CardTitle className="text-sm font-semibold text-gray-700">Leads por Etiqueta</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-gray-400" />
+                    <CardTitle className="text-sm font-semibold text-gray-700">Leads por Operação</CardTitle>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
                 </div>
               </CardHeader>
               <CardContent className="px-5 pb-5">
-                {!overview.labelDistribution?.length ? (
+                {!overview.operationDistribution?.length ? (
                   <div className="h-[260px] flex flex-col items-center justify-center gap-2">
-                    <Tag className="h-7 w-7 text-gray-200" />
-                    <p className="text-xs text-gray-400">Nenhuma etiqueta criada</p>
+                    <Smartphone className="h-7 w-7 text-gray-200" />
+                    <p className="text-xs text-gray-400">Nenhum lead no período</p>
                   </div>
                 ) : (
                   <div className="relative">
                     <ResponsiveContainer width="100%" height={260}>
                       <PieChart>
                         <Pie
-                          data={overview.labelDistribution}
+                          data={overview.operationDistribution}
                           cx="42%"
                           cy="50%"
                           innerRadius={62}
                           outerRadius={95}
                           paddingAngle={2}
                           dataKey="count"
-                          nameKey="labelName"
+                          nameKey="alias"
                           strokeWidth={0}
                         >
-                          {overview.labelDistribution.map((entry, i) => (
-                            <Cell key={i} fill={entry.labelColor} />
+                          {overview.operationDistribution.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip
-                          formatter={(v: number) => [formatNumber(v), "Leads"]}
+                          formatter={(v: number, _name, item) => {
+                            const total = totalOperationLeads || 1;
+                            const pct = ((v / total) * 100).toFixed(1);
+                            return [`${formatNumber(v)} (${pct}%)`, item?.payload?.alias ?? "Leads"];
+                          }}
                           contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
                         />
                         <Legend
@@ -762,10 +775,10 @@ export function OperationalDash() {
                           verticalAlign="middle"
                           iconType="circle"
                           iconSize={8}
-                          formatter={(v) => <span className="text-xs text-gray-600">{v}</span>}
+                          formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
                         />
                         <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                          <tspan x="42%" dy="-8" fontSize="22" fontWeight="700" fill="#111827">{formatNumber(totalLabels)}</tspan>
+                          <tspan x="42%" dy="-8" fontSize="22" fontWeight="700" fill="#111827">{formatNumber(totalOperationLeads)}</tspan>
                           <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">leads</tspan>
                         </text>
                       </PieChart>

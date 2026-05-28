@@ -503,6 +503,7 @@ export interface DashboardOverview {
   instancesTotal: number;
   dailySeries: Array<{ date: string; newContacts: number; messages: number }>;
   labelDistribution: Array<{ labelId: number; labelName: string; labelColor: string; count: number }>;
+  operationDistribution: Array<{ instanceId: number; alias: string; uid: string; color: string; count: number }>;
   topInstances: Array<{ instanceId: number; alias: string; uid: string; contactCount: number; messageCount: number; status: string }>;
   hourlyHeatmap: Array<{ hour: number; count: number }>;
   instanceUptime: Array<{ instanceId: number; alias: string; uptimePercent: number; totalChecks: number; onlineChecks: number }>;
@@ -518,7 +519,7 @@ export async function getDashboardOverview(
     totalContacts: 0, newContactsToday: 0, newContactsYesterday: 0,
     newContactsThisWeek: 0, newContactsThisMonth: 0, totalMessages: 0,
     messagesLast24h: 0, instancesOnline: 0, instancesOffline: 0, instancesTotal: 0,
-    dailySeries: [], labelDistribution: [], topInstances: [], hourlyHeatmap: [],
+    dailySeries: [], labelDistribution: [], operationDistribution: [], topInstances: [], hourlyHeatmap: [],
     instanceUptime: [], avgResponseTimeMinutes: null,
   };
   if (!db) return emptyResult;
@@ -600,6 +601,48 @@ export async function getDashboardOverview(
     .groupBy(instances.id, instances.alias, instances.uid, instances.status)
     .orderBy(desc(sql`COUNT(${messages.id})`));
 
+  // Distribuição de leads por operação (instância) no período filtrado
+  const opDist = await db.select({
+    instanceId: instances.id,
+    alias: instances.alias,
+    uid: instances.uid,
+    count: sql<number>`COUNT(${contacts.id})::int`,
+  }).from(instances)
+    .leftJoin(
+      contacts,
+      and(
+        eq(contacts.instanceId, instances.id),
+        gte(contacts.createdAt, periodStart),
+        lte(contacts.createdAt, periodEnd),
+      ),
+    )
+    .where(eq(instances.userId, userId))
+    .groupBy(instances.id, instances.alias, instances.uid)
+    .orderBy(desc(sql`COUNT(${contacts.id})`));
+
+  // Paleta estável (mesma ordem do retorno → mesma cor entre refetches)
+  const opPalette = [
+    "#DFFF00", // sougni lime (destaque)
+    "#3B82F6", // blue-500
+    "#10B981", // emerald-500
+    "#F59E0B", // amber-500
+    "#EC4899", // pink-500
+    "#8B5CF6", // violet-500
+    "#06B6D4", // cyan-500
+    "#F97316", // orange-500
+    "#84CC16", // lime-500
+    "#14B8A6", // teal-500
+  ];
+  const operationDistribution = opDist
+    .filter((r) => Number(r.count) > 0)
+    .map((r, i) => ({
+      instanceId: r.instanceId,
+      alias: r.alias ?? r.uid,
+      uid: r.uid,
+      color: opPalette[i % opPalette.length],
+      count: Number(r.count),
+    }));
+
   // Heatmap por hora (Postgres usa EXTRACT)
   const hourlyRows = await db.select({
     hour: sql<number>`EXTRACT(hour FROM messages."createdAt")::int`,
@@ -641,6 +684,7 @@ export async function getDashboardOverview(
     instancesTotal: userInstances.length,
     dailySeries,
     labelDistribution: labelDist.map((r) => ({ ...r, count: Number(r.count) })),
+    operationDistribution,
     topInstances: topInst.map((r) => ({ ...r, contactCount: Number(r.contactCount), messageCount: Number(r.messageCount), alias: r.alias ?? r.uid })),
     hourlyHeatmap,
     instanceUptime: uptimeData,
