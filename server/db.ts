@@ -726,14 +726,15 @@ export async function getDashboardOverview(
     GROUP BY contacts.id, contacts."createdAt"
   `;
 
-  const [timeStatsRow] = await db.execute(sql`
+  const timeStatsResult = await db.execute(sql`
     SELECT
       AVG(EXTRACT(EPOCH FROM (first_out_at - lead_at)) / 60.0) AS avg_minutes,
       COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (first_out_at - lead_at)) <= 300) AS within_5min,
       COUNT(*) AS attended_count
     FROM (${firstOutSubquery}) AS first_outs
     WHERE first_out_at >= lead_at
-  `) as unknown as Array<{ avg_minutes: string | null; within_5min: string; attended_count: string }>;
+  `);
+  const timeStatsRow = (timeStatsResult as unknown as { rows: Array<{ avg_minutes: string | null; within_5min: string; attended_count: string }> }).rows[0];
 
   const avgTimeToFirstContactMinutes = timeStatsRow?.avg_minutes != null
     ? Math.round(Number(timeStatsRow.avg_minutes) * 10) / 10
