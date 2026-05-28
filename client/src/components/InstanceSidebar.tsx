@@ -1,4 +1,4 @@
-import { Plus, Smartphone, Battery, BatteryCharging, LayoutDashboard, Globe, Wifi, WifiOff } from "lucide-react";
+import { Plus, Smartphone, Battery, BatteryCharging, LayoutDashboard, Globe, Wifi, WifiOff, Megaphone } from "lucide-react";
 import { formatPhoneUid } from "@/lib/formatPhone";
 import type { OfflineAlertItem } from "./OfflineAlert";
 
@@ -19,9 +19,10 @@ interface InstanceSidebarProps {
   onSelect: (instance: Instance) => void;
   onAddInstance: () => void;
   offlineAlerts: OfflineAlertItem[];
-  activeView?: "contacts" | "analytics" | "global" | "dashboard";
+  activeView?: "contacts" | "analytics" | "global" | "dashboard" | "midia";
   onSelectDashboard?: () => void;
   onSelectGlobal?: () => void;
+  onSelectMidia?: () => void;
 }
 
 export function InstanceSidebar({
@@ -33,6 +34,7 @@ export function InstanceSidebar({
   activeView,
   onSelectDashboard,
   onSelectGlobal,
+  onSelectMidia,
 }: InstanceSidebarProps) {
   const offlineIds = new Set(offlineAlerts.map((a) => a.instanceId));
   const onlineCount = instances.filter((i) => i.status === "online").length;
@@ -74,6 +76,18 @@ export function InstanceSidebar({
         >
           <Globe className="w-4 h-4 shrink-0" />
           <span>Todos os Contatos</span>
+        </button>
+
+        <button
+          onClick={onSelectMidia}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all text-sm font-medium ${
+            activeView === "midia" && !selectedInstance
+              ? "btn-primary"
+              : "text-foreground/70 hover:bg-sidebar-accent hover:text-foreground"
+          }`}
+        >
+          <Megaphone className="w-4 h-4 shrink-0" />
+          <span>Mídia On</span>
         </button>
       </div>
 

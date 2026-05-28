@@ -13,6 +13,7 @@ import { LabelsModal } from "@/components/LabelsModal";
 import { GlobalContactsView } from "@/components/GlobalContactsView";
 import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut } from "lucide-react";
 import { OperationalDash } from "@/components/OperationalDash";
+import { MidiaOnView } from "@/components/MidiaOnView";
 import { SougniLogo } from "@/components/SougniLogo";
 import { format } from "date-fns";
 
@@ -43,7 +44,7 @@ interface Contact {
   instanceUid?: string | null;
 }
 
-type CenterView = "contacts" | "analytics" | "global" | "dashboard";
+type CenterView = "contacts" | "analytics" | "global" | "dashboard" | "midia";
 
 export default function Monitor() {
   const { data: authUser } = trpc.auth.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
@@ -225,6 +226,12 @@ export default function Monitor() {
     setCenterView("global");
   };
 
+  const handleSelectMidia = () => {
+    setSelectedInstance(null);
+    setSelectedContact(null);
+    setCenterView("midia");
+  };
+
   const handleManualRefresh = () => {
     refetchInstances();
     utils.contacts.listAll.invalidate();
@@ -314,6 +321,7 @@ export default function Monitor() {
           activeView={centerView}
           onSelectDashboard={handleSelectDashboard}
           onSelectGlobal={handleSelectGlobal}
+          onSelectMidia={handleSelectMidia}
         />
 
         {/* Área central */}
@@ -322,6 +330,8 @@ export default function Monitor() {
           <div className="flex-1 overflow-hidden">
             <OperationalDash />
           </div>
+        ) : centerView === "midia" && !selectedInstance ? (
+          <MidiaOnView />
         ) : centerView === "global" && !selectedInstance && !selectedContact ? (
           <GlobalContactsView onSelectContact={handleSelectGlobalContact} />
         ) : !selectedInstance ? (
