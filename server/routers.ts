@@ -36,6 +36,7 @@ import {
   updateInstanceStatus,
 } from "./db";
 import { checkInstanceStatus, sendTextMessage } from "./waboxapp";
+import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 
 // ID fixo do painel (único usuário do sistema)
@@ -411,12 +412,36 @@ export const appRouter = router({
         z.object({
           dateFrom: z.string().optional(),
           dateTo: z.string().optional(),
+          hospitals: z.array(z.string()).optional(),
+          procedures: z.array(z.string()).optional(),
         }).optional()
       )
       .query(async ({ input }) => {
         return getDashboardOverview(OWNER_ID, {
           dateFrom: input?.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input?.dateTo ? new Date(input.dateTo) : undefined,
+          hospitals: input?.hospitals,
+          procedures: input?.procedures,
+        });
+      }),
+
+    mediaInvestment: protectedProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+          hospitals: z.array(z.string()).optional(),
+          procedures: z.array(z.string()).optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        const dateFrom = input?.dateFrom ? new Date(input.dateFrom) : undefined;
+        const dateTo = input?.dateTo ? new Date(input.dateTo + "T23:59:59.999") : undefined;
+        return getMediaInvestmentSummary({
+          dateFrom,
+          dateTo,
+          hospitals: input?.hospitals,
+          procedures: input?.procedures,
         });
       }),
   }),

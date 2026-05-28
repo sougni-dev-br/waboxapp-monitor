@@ -515,7 +515,7 @@ export interface DashboardOverview {
 
 export async function getDashboardOverview(
   userId: number,
-  opts?: { dateFrom?: Date; dateTo?: Date }
+  opts?: { dateFrom?: Date; dateTo?: Date; hospitals?: string[]; procedures?: string[] }
 ): Promise<DashboardOverview> {
   const db = await getDb();
   const emptyResult: DashboardOverview = {
@@ -529,7 +529,18 @@ export async function getDashboardOverview(
   };
   if (!db) return emptyResult;
 
-  const userInstances = await db.select().from(instances).where(eq(instances.userId, userId));
+  const allUserInstances = await db.select().from(instances).where(eq(instances.userId, userId));
+
+  // Filtra instâncias por hospital/procedimento via mapeamento manual (alias → hospital/procedures)
+  const { mapInstanceToHospital } = await import("./mediaInvestment");
+  const userInstances = allUserInstances.filter((inst) => {
+    if (!opts?.hospitals?.length && !opts?.procedures?.length) return true;
+    const m = mapInstanceToHospital(inst.alias);
+    if (opts.hospitals?.length && (!m.hospital || !opts.hospitals.includes(m.hospital))) return false;
+    if (opts.procedures?.length && !opts.procedures.some((p) => m.procedures.includes(p))) return false;
+    return true;
+  });
+
   const instanceIds = userInstances.map((i) => i.id);
   if (instanceIds.length === 0) return {
     ...emptyResult,

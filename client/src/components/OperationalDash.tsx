@@ -23,8 +23,12 @@ import {
   CalendarCheck,
   Stethoscope,
   CalendarIcon,
+  Building2,
+  Scissors,
+  DollarSign,
   X,
 } from "lucide-react";
+import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { RealtimePulseCard } from "@/components/RealtimePulseCard";
 import {
   XAxis,
@@ -60,12 +64,29 @@ import { Skeleton } from "@/components/ui/skeleton";
 const formatNumber = (num: number): string =>
   new Intl.NumberFormat("pt-BR").format(num);
 
+const formatBRL = (num: number): string =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  }).format(num);
+
+const formatBRLCompact = (num: number): string => {
+  if (num >= 1_000_000) return `R$ ${(num / 1_000_000).toFixed(1).replace(".", ",")}M`;
+  if (num >= 1_000) return `R$ ${(num / 1_000).toFixed(1).replace(".", ",")}k`;
+  return formatBRL(num);
+};
+
 const formatPercent = (num: number): string =>
   new Intl.NumberFormat("pt-BR", {
     style: "percent",
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   }).format(num / 100);
+
+// Opções estáveis para os filtros (mesmos valores da planilha de mídia)
+const HOSPITAL_OPTIONS = ["HOLHOS", "HOPE", "CBV", "SANTA LUZIA"];
+const PROCEDURE_OPTIONS = ["CATARATA", "REFRATIVA", "PLASTICA"];
 
 const calculateVariation = (current: number, previous: number): number => {
   if (previous === 0) return current > 0 ? 100 : 0;
@@ -347,6 +368,8 @@ function DateRangePicker({ dateRange, onSelect, onClear }: DateRangePickerProps)
 
 export function OperationalDash() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [selectedHospitals, setSelectedHospitals] = useState<string[]>([]);
+  const [selectedProcedures, setSelectedProcedures] = useState<string[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const lastDataUpdatedAt = useRef(0);
 
@@ -407,18 +430,28 @@ export function OperationalDash() {
   // Strings estáveis para evitar re-renders infinitos no React Query
   const dateFromStr = dateRange?.from ? toISODate(dateRange.from) : undefined;
   const dateToStr = dateRange?.to ? toISODate(dateRange.to) : undefined;
+  const hospitalsKey = selectedHospitals.join(",");
+  const proceduresKey = selectedProcedures.join(",");
 
-  // Converter DateRange para strings ISO para a query
+  // Converter filtros em input estável (memoized)
   const queryInput = useMemo(() => {
-    if (!dateFromStr && !dateToStr) return undefined;
-    return { dateFrom: dateFromStr, dateTo: dateToStr };
-  }, [dateFromStr, dateToStr]);
+    const hospitals = hospitalsKey ? hospitalsKey.split(",") : undefined;
+    const procedures = proceduresKey ? proceduresKey.split(",") : undefined;
+    if (!dateFromStr && !dateToStr && !hospitals && !procedures) return undefined;
+    return { dateFrom: dateFromStr, dateTo: dateToStr, hospitals, procedures };
+  }, [dateFromStr, dateToStr, hospitalsKey, proceduresKey]);
 
   const { data: overview, isLoading: overviewLoading, dataUpdatedAt } =
     trpc.dashboard.overview.useQuery(queryInput, {
       refetchInterval: 60_000,
       refetchIntervalInBackground: true,
       staleTime: 30_000, // Considera dados frescos por 30s para evitar race condition
+    });
+
+  const { data: mediaInvestment } =
+    trpc.dashboard.mediaInvestment.useQuery(queryInput, {
+      refetchInterval: 5 * 60_000, // refetch a cada 5min (planilha não muda em tempo real)
+      staleTime: 60_000,
     });
 
   useEffect(() => {
@@ -535,11 +568,22 @@ export function OperationalDash() {
             </div>
           </div>
 
-          {/* DateRangePicker */}
-          <div className="flex items-center gap-2">
-            {dateRange?.from && (
-              <span className="text-xs text-gray-400 hidden sm:block">{periodLabel}</span>
-            )}
+          {/* Filtros: Hospital + Procedimento + Período */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <MultiSelectFilter
+              label="Hospital"
+              options={HOSPITAL_OPTIONS}
+              selected={selectedHospitals}
+              onChange={setSelectedHospitals}
+              icon={<Building2 className="h-3.5 w-3.5 shrink-0" />}
+            />
+            <MultiSelectFilter
+              label="Procedimento"
+              options={PROCEDURE_OPTIONS}
+              selected={selectedProcedures}
+              onChange={setSelectedProcedures}
+              icon={<Scissors className="h-3.5 w-3.5 shrink-0" />}
+            />
             <DateRangePicker
               dateRange={dateRange}
               onSelect={setDateRange}
@@ -775,6 +819,144 @@ export function OperationalDash() {
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* ── Investimento (Hospital + Procedimento) ───────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* Investimento por Hospital */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.28 }}
+          >
+            <Card className="border border-gray-100 bg-white h-full">
+              <CardHeader className="pb-1 pt-5 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-gray-400" />
+                    <CardTitle className="text-sm font-semibold text-gray-700">Investimento por Hospital</CardTitle>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                {!mediaInvestment?.byHospital?.length ? (
+                  <div className="h-[260px] flex flex-col items-center justify-center gap-2">
+                    <DollarSign className="h-7 w-7 text-gray-200" />
+                    <p className="text-xs text-gray-400">Sem investimento no período</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={mediaInvestment.byHospital}
+                        cx="42%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={95}
+                        paddingAngle={2}
+                        dataKey="cost"
+                        nameKey="hospital"
+                        strokeWidth={0}
+                      >
+                        {mediaInvestment.byHospital.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v: number, _name, item) => {
+                          const total = mediaInvestment.totalCost || 1;
+                          const pct = ((v / total) * 100).toFixed(1);
+                          return [`${formatBRL(v)} (${pct}%)`, item?.payload?.hospital ?? "Investimento"];
+                        }}
+                        contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="right"
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
+                      />
+                      <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
+                        <tspan x="42%" dy="-8" fontSize="18" fontWeight="700" fill="#111827">{formatBRLCompact(mediaInvestment.totalCost)}</tspan>
+                        <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">investido</tspan>
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Investimento por Procedimento */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32 }}
+          >
+            <Card className="border border-gray-100 bg-white h-full">
+              <CardHeader className="pb-1 pt-5 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Scissors className="h-4 w-4 text-gray-400" />
+                    <CardTitle className="text-sm font-semibold text-gray-700">Investimento por Procedimento</CardTitle>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                {!mediaInvestment?.byProcedure?.length ? (
+                  <div className="h-[260px] flex flex-col items-center justify-center gap-2">
+                    <DollarSign className="h-7 w-7 text-gray-200" />
+                    <p className="text-xs text-gray-400">Sem investimento no período</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={mediaInvestment.byProcedure}
+                        cx="42%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={95}
+                        paddingAngle={2}
+                        dataKey="cost"
+                        nameKey="procedure"
+                        strokeWidth={0}
+                      >
+                        {mediaInvestment.byProcedure.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v: number, _name, item) => {
+                          const total = mediaInvestment.totalCost || 1;
+                          const pct = ((v / total) * 100).toFixed(1);
+                          return [`${formatBRL(v)} (${pct}%)`, item?.payload?.procedure ?? "Investimento"];
+                        }}
+                        contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="right"
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
+                      />
+                      <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
+                        <tspan x="42%" dy="-8" fontSize="18" fontWeight="700" fill="#111827">{formatBRLCompact(mediaInvestment.totalCost)}</tspan>
+                        <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">investido</tspan>
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
                 )}
               </CardContent>
             </Card>
