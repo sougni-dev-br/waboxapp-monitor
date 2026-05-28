@@ -1,5 +1,5 @@
 /**
- * Mídia On — view de relatórios de mídia/marketing.
+ * Criativos — view de relatórios de mídia/marketing (Reportei embed).
  * Carrega um dashboard externo (Reportei) via iframe ocupando toda a área central.
  */
 import { Megaphone, ExternalLink, RefreshCw } from "lucide-react";
@@ -27,7 +27,7 @@ export function MidiaOnView() {
             <Megaphone className="w-4 h-4" style={{ color: "var(--sougni-ink)" }} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground truncate">Mídia On</h2>
+            <h2 className="text-sm font-semibold text-foreground truncate">Criativos</h2>
             <p className="text-[11px] text-muted-foreground truncate">
               Relatório de performance · atualização em tempo real
             </p>
@@ -60,7 +60,7 @@ export function MidiaOnView() {
         <iframe
           key={reloadKey}
           ref={iframeRef}
-          title="Mídia On — Reportei"
+          title="Criativos — Reportei"
           src={REPORTEI_EMBED_URL}
           className="w-full h-full block"
           style={{ border: 0, background: "white" }}

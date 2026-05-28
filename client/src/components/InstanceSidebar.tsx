@@ -87,7 +87,7 @@ export function InstanceSidebar({
           }`}
         >
           <Megaphone className="w-4 h-4 shrink-0" />
-          <span>Mídia On</span>
+          <span>Criativos</span>
         </button>
       </div>
 
