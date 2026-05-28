@@ -499,6 +499,10 @@ export interface DashboardOverview {
   totalLeadsInPeriod: number;
   contactedLeadsInPeriod: number;
   contactedLeadsPercent: number;
+  validLeadsPercent: number;          // % com ≥1 inbound (cliente respondeu)
+  invalidLeadsPercent: number;        // 100 - validLeadsPercent
+  avgTimeToFirstContactMinutes: number | null;  // tempo médio até 1ª outbound
+  respondedWithin5MinPercent: number; // % com 1ª outbound em ≤5min após createdAt
   totalMessages: number;
   messagesLast24h: number;
   instancesOnline: number;
@@ -522,6 +526,8 @@ export async function getDashboardOverview(
     totalContacts: 0, newContactsToday: 0, newContactsYesterday: 0,
     newContactsThisWeek: 0, newContactsThisMonth: 0,
     totalLeadsInPeriod: 0, contactedLeadsInPeriod: 0, contactedLeadsPercent: 0,
+    validLeadsPercent: 0, invalidLeadsPercent: 0,
+    avgTimeToFirstContactMinutes: null, respondedWithin5MinPercent: 0,
     totalMessages: 0, messagesLast24h: 0,
     instancesOnline: 0, instancesOffline: 0, instancesTotal: 0,
     dailySeries: [], labelDistribution: [], operationDistribution: [], topInstances: [], hourlyHeatmap: [],
@@ -687,6 +693,56 @@ export async function getDashboardOverview(
     ? Math.round((contactedLeadsInPeriod / totalLeadsInPeriod) * 100)
     : 0;
 
+  // Leads válidos = contatos no período com ≥1 mensagem INBOUND (cliente respondeu)
+  const [periodValidRow] = await db.select({
+    count: sql<number>`COUNT(DISTINCT ${contacts.id})::int`,
+  }).from(contacts)
+    .innerJoin(messages, and(
+      eq(messages.contactId, contacts.id),
+      eq(messages.direction, "in"),
+    ))
+    .where(and(
+      inArray(contacts.instanceId, instanceIds),
+      gte(contacts.createdAt, periodStart),
+      lte(contacts.createdAt, periodEnd),
+    ));
+
+  const validLeadsCount = Number(periodValidRow?.count ?? 0);
+  const validLeadsPercent = totalLeadsInPeriod > 0
+    ? Math.round((validLeadsCount / totalLeadsInPeriod) * 100)
+    : 0;
+  const invalidLeadsPercent = totalLeadsInPeriod > 0 ? 100 - validLeadsPercent : 0;
+
+  // Tempo até primeiro contato (1ª outbound) — média em minutos
+  // E % atendidos em ≤5min (em relação ao total de leads do período)
+  const firstOutSubquery = sql`
+    SELECT contacts.id AS contact_id, contacts."createdAt" AS lead_at,
+           MIN(messages."createdAt") AS first_out_at
+    FROM contacts
+    INNER JOIN messages ON messages."contactId" = contacts.id AND messages.direction = 'out'
+    WHERE contacts."instanceId" = ANY(${sql.raw(`ARRAY[${instanceIds.join(",")}]::int[]`)})
+      AND contacts."createdAt" >= ${periodStart}
+      AND contacts."createdAt" <= ${periodEnd}
+    GROUP BY contacts.id, contacts."createdAt"
+  `;
+
+  const [timeStatsRow] = await db.execute(sql`
+    SELECT
+      AVG(EXTRACT(EPOCH FROM (first_out_at - lead_at)) / 60.0) AS avg_minutes,
+      COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (first_out_at - lead_at)) <= 300) AS within_5min,
+      COUNT(*) AS attended_count
+    FROM (${firstOutSubquery}) AS first_outs
+    WHERE first_out_at >= lead_at
+  `) as unknown as Array<{ avg_minutes: string | null; within_5min: string; attended_count: string }>;
+
+  const avgTimeToFirstContactMinutes = timeStatsRow?.avg_minutes != null
+    ? Math.round(Number(timeStatsRow.avg_minutes) * 10) / 10
+    : null;
+  const within5MinCount = Number(timeStatsRow?.within_5min ?? 0);
+  const respondedWithin5MinPercent = totalLeadsInPeriod > 0
+    ? Math.round((within5MinCount / totalLeadsInPeriod) * 100)
+    : 0;
+
   // Heatmap por hora (Postgres usa EXTRACT)
   const hourlyRows = await db.select({
     hour: sql<number>`EXTRACT(hour FROM messages."createdAt")::int`,
@@ -724,6 +780,10 @@ export async function getDashboardOverview(
     totalLeadsInPeriod,
     contactedLeadsInPeriod,
     contactedLeadsPercent,
+    validLeadsPercent,
+    invalidLeadsPercent,
+    avgTimeToFirstContactMinutes,
+    respondedWithin5MinPercent,
     totalMessages: Number(totalMsgRow?.count ?? 0),
     messagesLast24h: Number(msg24hRow?.count ?? 0),
     instancesOnline: userInstances.filter((i) => i.status === 'online').length,

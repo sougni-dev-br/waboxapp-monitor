@@ -9,6 +9,7 @@ import type { DateRange } from "react-day-picker";
 import {
   Users,
   UserCheck,
+  UserX,
   Wifi,
   WifiOff,
   TrendingUp,
@@ -26,6 +27,8 @@ import {
   Building2,
   Scissors,
   DollarSign,
+  Timer,
+  Zap,
   X,
 } from "lucide-react";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
@@ -683,6 +686,180 @@ export function OperationalDash() {
           />
         </div>
 
+        {/* ── Investimento (Hospital + Procedimento) ───────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* Investimento por Hospital */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22 }}
+          >
+            <Card className="border border-gray-100 bg-white h-full">
+              <CardHeader className="pb-1 pt-5 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-gray-400" />
+                    <CardTitle className="text-sm font-semibold text-gray-700">Investimento por Hospital</CardTitle>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                {!mediaInvestment?.byHospital?.length ? (
+                  <div className="h-[260px] flex flex-col items-center justify-center gap-2">
+                    <DollarSign className="h-7 w-7 text-gray-200" />
+                    <p className="text-xs text-gray-400">Sem investimento no período</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={mediaInvestment.byHospital}
+                        cx="42%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={95}
+                        paddingAngle={2}
+                        dataKey="cost"
+                        nameKey="hospital"
+                        strokeWidth={0}
+                      >
+                        {mediaInvestment.byHospital.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v: number, _name, item) => {
+                          const total = mediaInvestment.totalCost || 1;
+                          const pct = ((v / total) * 100).toFixed(1);
+                          return [`${formatBRL(v)} (${pct}%)`, item?.payload?.hospital ?? "Investimento"];
+                        }}
+                        contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="right"
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
+                      />
+                      <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
+                        <tspan x="42%" dy="-8" fontSize="18" fontWeight="700" fill="#111827">{formatBRLCompact(mediaInvestment.totalCost)}</tspan>
+                        <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">investido</tspan>
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Investimento por Procedimento */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.26 }}
+          >
+            <Card className="border border-gray-100 bg-white h-full">
+              <CardHeader className="pb-1 pt-5 px-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Scissors className="h-4 w-4 text-gray-400" />
+                    <CardTitle className="text-sm font-semibold text-gray-700">Investimento por Procedimento</CardTitle>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-5 pb-5">
+                {!mediaInvestment?.byProcedure?.length ? (
+                  <div className="h-[260px] flex flex-col items-center justify-center gap-2">
+                    <DollarSign className="h-7 w-7 text-gray-200" />
+                    <p className="text-xs text-gray-400">Sem investimento no período</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie
+                        data={mediaInvestment.byProcedure}
+                        cx="42%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={95}
+                        paddingAngle={2}
+                        dataKey="cost"
+                        nameKey="procedure"
+                        strokeWidth={0}
+                      >
+                        {mediaInvestment.byProcedure.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v: number, _name, item) => {
+                          const total = mediaInvestment.totalCost || 1;
+                          const pct = ((v / total) * 100).toFixed(1);
+                          return [`${formatBRL(v)} (${pct}%)`, item?.payload?.procedure ?? "Investimento"];
+                        }}
+                        contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="right"
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
+                      />
+                      <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
+                        <tspan x="42%" dy="-8" fontSize="18" fontWeight="700" fill="#111827">{formatBRLCompact(mediaInvestment.totalCost)}</tspan>
+                        <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">investido</tspan>
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* ── Qualidade de Leads + Tempo de Resposta ───────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KPICard
+            title="% Leads Válidos"
+            value={overview.validLeadsPercent}
+            suffix="%"
+            icon={<UserCheck className="h-5 w-5 text-emerald-600" />}
+            iconBg="bg-emerald-50"
+            delay={0.30}
+          />
+          <KPICard
+            title="% Leads Inválidos"
+            value={overview.invalidLeadsPercent}
+            suffix="%"
+            icon={<UserX className="h-5 w-5 text-red-500" />}
+            iconBg="bg-red-50"
+            delay={0.34}
+          />
+          <KPICard
+            title="Tempo até 1º contato"
+            value={overview.avgTimeToFirstContactMinutes ?? 0}
+            suffix={overview.avgTimeToFirstContactMinutes !== null ? " min" : ""}
+            icon={<Timer className="h-5 w-5 text-amber-600" />}
+            iconBg="bg-amber-50"
+            delay={0.38}
+          />
+          <KPICard
+            title="Atendidos em ≤5min"
+            value={overview.respondedWithin5MinPercent}
+            suffix="%"
+            icon={<Zap className="h-5 w-5 text-blue-600" />}
+            iconBg="bg-blue-50"
+            delay={0.42}
+          />
+        </div>
+
         {/* ── Realtime Pulse ───────────────────────────────────────────────── */}
         <RealtimePulseCard />
 
@@ -825,143 +1002,6 @@ export function OperationalDash() {
           </motion.div>
         </div>
 
-        {/* ── Investimento (Hospital + Procedimento) ───────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-          {/* Investimento por Hospital */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.28 }}
-          >
-            <Card className="border border-gray-100 bg-white h-full">
-              <CardHeader className="pb-1 pt-5 px-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-gray-400" />
-                    <CardTitle className="text-sm font-semibold text-gray-700">Investimento por Hospital</CardTitle>
-                  </div>
-                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
-                </div>
-              </CardHeader>
-              <CardContent className="px-5 pb-5">
-                {!mediaInvestment?.byHospital?.length ? (
-                  <div className="h-[260px] flex flex-col items-center justify-center gap-2">
-                    <DollarSign className="h-7 w-7 text-gray-200" />
-                    <p className="text-xs text-gray-400">Sem investimento no período</p>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={mediaInvestment.byHospital}
-                        cx="42%"
-                        cy="50%"
-                        innerRadius={62}
-                        outerRadius={95}
-                        paddingAngle={2}
-                        dataKey="cost"
-                        nameKey="hospital"
-                        strokeWidth={0}
-                      >
-                        {mediaInvestment.byHospital.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(v: number, _name, item) => {
-                          const total = mediaInvestment.totalCost || 1;
-                          const pct = ((v / total) * 100).toFixed(1);
-                          return [`${formatBRL(v)} (${pct}%)`, item?.payload?.hospital ?? "Investimento"];
-                        }}
-                        contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
-                      />
-                      <Legend
-                        layout="vertical"
-                        align="right"
-                        verticalAlign="middle"
-                        iconType="circle"
-                        iconSize={8}
-                        formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
-                      />
-                      <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                        <tspan x="42%" dy="-8" fontSize="18" fontWeight="700" fill="#111827">{formatBRLCompact(mediaInvestment.totalCost)}</tspan>
-                        <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">investido</tspan>
-                      </text>
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Investimento por Procedimento */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.32 }}
-          >
-            <Card className="border border-gray-100 bg-white h-full">
-              <CardHeader className="pb-1 pt-5 px-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Scissors className="h-4 w-4 text-gray-400" />
-                    <CardTitle className="text-sm font-semibold text-gray-700">Investimento por Procedimento</CardTitle>
-                  </div>
-                  <span className="text-[10px] text-gray-400">{periodLabel}</span>
-                </div>
-              </CardHeader>
-              <CardContent className="px-5 pb-5">
-                {!mediaInvestment?.byProcedure?.length ? (
-                  <div className="h-[260px] flex flex-col items-center justify-center gap-2">
-                    <DollarSign className="h-7 w-7 text-gray-200" />
-                    <p className="text-xs text-gray-400">Sem investimento no período</p>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={mediaInvestment.byProcedure}
-                        cx="42%"
-                        cy="50%"
-                        innerRadius={62}
-                        outerRadius={95}
-                        paddingAngle={2}
-                        dataKey="cost"
-                        nameKey="procedure"
-                        strokeWidth={0}
-                      >
-                        {mediaInvestment.byProcedure.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(v: number, _name, item) => {
-                          const total = mediaInvestment.totalCost || 1;
-                          const pct = ((v / total) * 100).toFixed(1);
-                          return [`${formatBRL(v)} (${pct}%)`, item?.payload?.procedure ?? "Investimento"];
-                        }}
-                        contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }}
-                      />
-                      <Legend
-                        layout="vertical"
-                        align="right"
-                        verticalAlign="middle"
-                        iconType="circle"
-                        iconSize={8}
-                        formatter={(v) => <span className="text-xs text-gray-600 truncate max-w-[120px] inline-block align-middle">{v}</span>}
-                      />
-                      <text x="42%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                        <tspan x="42%" dy="-8" fontSize="18" fontWeight="700" fill="#111827">{formatBRLCompact(mediaInvestment.totalCost)}</tspan>
-                        <tspan x="42%" dy="20" fontSize="10" fill="#9CA3AF">investido</tspan>
-                      </text>
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
 
         {/* ── Heatmap de Horários ─────────────────────────────────────────── */}
         <motion.div
