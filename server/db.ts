@@ -496,6 +496,9 @@ export interface DashboardOverview {
   newContactsYesterday: number;
   newContactsThisWeek: number;
   newContactsThisMonth: number;
+  totalLeadsInPeriod: number;
+  contactedLeadsInPeriod: number;
+  contactedLeadsPercent: number;
   totalMessages: number;
   messagesLast24h: number;
   instancesOnline: number;
@@ -517,8 +520,10 @@ export async function getDashboardOverview(
   const db = await getDb();
   const emptyResult: DashboardOverview = {
     totalContacts: 0, newContactsToday: 0, newContactsYesterday: 0,
-    newContactsThisWeek: 0, newContactsThisMonth: 0, totalMessages: 0,
-    messagesLast24h: 0, instancesOnline: 0, instancesOffline: 0, instancesTotal: 0,
+    newContactsThisWeek: 0, newContactsThisMonth: 0,
+    totalLeadsInPeriod: 0, contactedLeadsInPeriod: 0, contactedLeadsPercent: 0,
+    totalMessages: 0, messagesLast24h: 0,
+    instancesOnline: 0, instancesOffline: 0, instancesTotal: 0,
     dailySeries: [], labelDistribution: [], operationDistribution: [], topInstances: [], hourlyHeatmap: [],
     instanceUptime: [], avgResponseTimeMinutes: null,
   };
@@ -643,6 +648,34 @@ export async function getDashboardOverview(
       count: Number(r.count),
     }));
 
+  // Total de leads no período + % contatados (têm ≥1 msg outbound de operador)
+  const [periodLeadsRow] = await db.select({
+    count: sql<number>`COUNT(*)::int`,
+  }).from(contacts).where(and(
+    inArray(contacts.instanceId, instanceIds),
+    gte(contacts.createdAt, periodStart),
+    lte(contacts.createdAt, periodEnd),
+  ));
+
+  const [periodContactedRow] = await db.select({
+    count: sql<number>`COUNT(DISTINCT ${contacts.id})::int`,
+  }).from(contacts)
+    .innerJoin(messages, and(
+      eq(messages.contactId, contacts.id),
+      eq(messages.direction, "out"),
+    ))
+    .where(and(
+      inArray(contacts.instanceId, instanceIds),
+      gte(contacts.createdAt, periodStart),
+      lte(contacts.createdAt, periodEnd),
+    ));
+
+  const totalLeadsInPeriod = Number(periodLeadsRow?.count ?? 0);
+  const contactedLeadsInPeriod = Number(periodContactedRow?.count ?? 0);
+  const contactedLeadsPercent = totalLeadsInPeriod > 0
+    ? Math.round((contactedLeadsInPeriod / totalLeadsInPeriod) * 100)
+    : 0;
+
   // Heatmap por hora (Postgres usa EXTRACT)
   const hourlyRows = await db.select({
     hour: sql<number>`EXTRACT(hour FROM messages."createdAt")::int`,
@@ -677,6 +710,9 @@ export async function getDashboardOverview(
     newContactsYesterday: Number(yesterdayRow?.count ?? 0),
     newContactsThisWeek: Number(weekRow?.count ?? 0),
     newContactsThisMonth: Number(monthRow?.count ?? 0),
+    totalLeadsInPeriod,
+    contactedLeadsInPeriod,
+    contactedLeadsPercent,
     totalMessages: Number(totalMsgRow?.count ?? 0),
     messagesLast24h: Number(msg24hRow?.count ?? 0),
     instancesOnline: userInstances.filter((i) => i.status === 'online').length,

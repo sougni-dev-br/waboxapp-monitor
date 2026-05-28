@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { DateRange } from "react-day-picker";
 import {
   Users,
-  MessageSquare,
+  UserCheck,
   Wifi,
   WifiOff,
   TrendingUp,
@@ -18,8 +18,10 @@ import {
   Activity,
   RefreshCw,
   BarChart2,
-  Tag,
   Smartphone,
+  CalendarDays,
+  CalendarCheck,
+  Stethoscope,
   CalendarIcon,
   X,
 } from "lucide-react";
@@ -505,7 +507,6 @@ export function OperationalDash() {
     );
   }
 
-  const leadsVariation = calculateVariation(overview.newContactsToday, overview.newContactsYesterday);
   const timeStr = lastUpdate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   return (
@@ -599,52 +600,42 @@ export function OperationalDash() {
         </AnimatePresence>
 
         {/* ── KPI Cards ───────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
           <KPICard
-            title="Leads Hoje"
-            value={overview.newContactsToday}
-            variation={leadsVariation}
+            title="Total Leads"
+            value={overview.totalLeadsInPeriod}
             icon={<Users className="h-5 w-5 text-gray-700" />}
+            iconBg="bg-gray-50"
             delay={0}
           />
           <KPICard
-            title="Leads Esta Semana"
-            value={overview.newContactsThisWeek}
-            variationLabel="últimos 7d"
-            icon={<TrendingUp className="h-5 w-5 text-gray-700" />}
+            title="Leads Contatados"
+            value={overview.contactedLeadsPercent}
+            suffix="%"
+            icon={<UserCheck className="h-5 w-5 text-emerald-600" />}
+            iconBg="bg-emerald-50"
             delay={0.05}
           />
           <KPICard
-            title="Mensagens 24h"
-            value={overview.messagesLast24h}
-            icon={<MessageSquare className="h-5 w-5 text-gray-700" />}
+            title="Consulta Agendada"
+            value={95}
+            icon={<CalendarDays className="h-5 w-5 text-blue-600" />}
+            iconBg="bg-blue-50"
             delay={0.1}
           />
           <KPICard
-            title="Instâncias Online"
-            value={overview.instancesOnline}
-            suffix={`/${overview.instancesTotal}`}
-            iconBg={
-              overview.instancesTotal === 0
-                ? "bg-gray-100"
-                : overview.instancesOnline === overview.instancesTotal
-                ? "bg-emerald-50"
-                : overview.instancesOnline === 0
-                ? "bg-red-50"
-                : "bg-amber-50"
-            }
-            icon={
-              overview.instancesTotal === 0 ? (
-                <Wifi className="h-5 w-5 text-gray-400" />
-              ) : overview.instancesOnline === overview.instancesTotal ? (
-                <Wifi className="h-5 w-5 text-emerald-600" />
-              ) : overview.instancesOnline === 0 ? (
-                <WifiOff className="h-5 w-5 text-red-500" />
-              ) : (
-                <Wifi className="h-5 w-5 text-amber-600" />
-              )
-            }
+            title="Consulta Realizada"
+            value={37}
+            icon={<CalendarCheck className="h-5 w-5 text-violet-600" />}
+            iconBg="bg-violet-50"
             delay={0.15}
+          />
+          <KPICard
+            title="Cirurgia Realizada"
+            value={5}
+            icon={<Stethoscope className="h-5 w-5 text-rose-600" />}
+            iconBg="bg-rose-50"
+            delay={0.2}
           />
         </div>
 
