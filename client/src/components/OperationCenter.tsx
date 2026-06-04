@@ -237,36 +237,127 @@ const TYPE_LABEL: Record<string, { label: string; icon: React.ComponentType<{ cl
 // ─── Webhook Button ───────────────────────────────────────────────────────────
 
 function WebhookButton() {
-  const [status, setStatus] = useState<"idle" | "running" | "ok" | "err">("idle");
-  const [detail, setDetail] = useState<string>("");
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [autoTryStatus, setAutoTryStatus] = useState<string | null>(null);
   const utils = trpc.useUtils();
-  const setupMutation = trpc.instances.setupWebhook.useMutation({
+  const { data, isLoading, refetch } = trpc.instances.webhookStatus.useQuery(undefined, {
+    enabled: open,
+    refetchOnWindowFocus: false,
+  });
+  const autoSetup = trpc.instances.setupWebhook.useMutation({
     onSuccess: (res) => {
       const fail = res.results.filter((r) => !r.ok);
-      setStatus(fail.length === 0 ? "ok" : "err");
-      setDetail(fail.length === 0
-        ? `Webhook configurado em ${res.results.length} instância(s) → ${res.hookUrl}`
-        : `Erro em ${fail.length}: ${fail.map((f) => f.alias).join(", ")}`);
-      utils.instances.list.invalidate();
+      setAutoTryStatus(fail.length === 0
+        ? `✅ Configurado automaticamente em ${res.results.length} instância(s)`
+        : `⚠️ API rejeitou — copie a URL abaixo e cole manualmente no painel WaboxApp`);
+      utils.instances.webhookStatus.invalidate();
+      refetch();
     },
-    onError: (e) => { setStatus("err"); setDetail(e.message); },
+    onError: () => setAutoTryStatus("⚠️ API rejeitou — use o método manual abaixo"),
   });
+
+  const totalOk = data?.instances.filter((i) => i.isOk).length ?? 0;
+  const totalCount = data?.instances.length ?? 0;
+  const allOk = totalCount > 0 && totalOk === totalCount;
+
+  const copyUrl = () => {
+    if (!data?.expectedHookUrl) return;
+    navigator.clipboard.writeText(data.expectedHookUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className="flex items-center gap-2">
-      {detail && (
-        <span className={`text-[10px] ${status === "ok" ? "text-emerald-600" : "text-red-500"} max-w-[260px] truncate`} title={detail}>
-          {detail}
-        </span>
-      )}
-      <button
-        onClick={() => { setStatus("running"); setupMutation.mutate(undefined); }}
-        disabled={setupMutation.isPending}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-        title="Configurar webhook automaticamente em todas as instâncias"
-      >
-        {setupMutation.isPending ? "Configurando…" : status === "ok" ? "Webhook OK" : "Sincronizar webhook"}
-      </button>
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+            allOk
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+          }`}
+          title="Verificar status do webhook em cada instância"
+        >
+          {allOk ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+          Webhook {data ? `${totalOk}/${totalCount}` : ""}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[440px] p-0 shadow-xl border border-gray-100 rounded-2xl overflow-hidden" align="end" sideOffset={8}>
+        <div className="px-4 pt-4 pb-3 border-b border-gray-50">
+          <p className="text-sm font-semibold text-gray-900">Configuração do Webhook</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            Cole essa URL no painel da WaboxApp (Configurações → Hook URL) de cada instância para receber as mensagens.
+          </p>
+        </div>
+
+        {/* URL to copy */}
+        <div className="px-4 py-3 bg-gray-50/40">
+          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">URL do Webhook</p>
+          <div className="flex items-stretch gap-2">
+            <code className="flex-1 text-[11px] bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-gray-700 break-all">
+              {data?.expectedHookUrl ?? "carregando…"}
+            </code>
+            <button
+              onClick={copyUrl}
+              className={`px-3 text-xs font-medium rounded-lg transition-all ${copied ? "bg-emerald-500 text-white" : "bg-gray-900 text-white hover:bg-gray-800"}`}
+            >
+              {copied ? "Copiado!" : "Copiar"}
+            </button>
+          </div>
+          <button
+            onClick={() => { setAutoTryStatus(null); autoSetup.mutate(undefined); }}
+            disabled={autoSetup.isPending}
+            className="mt-2 text-[11px] text-gray-500 hover:text-gray-900 underline underline-offset-4 disabled:opacity-50"
+          >
+            {autoSetup.isPending ? "Tentando…" : "Tentar configurar via API"}
+          </button>
+          {autoTryStatus && (
+            <p className="text-[11px] text-gray-600 mt-2">{autoTryStatus}</p>
+          )}
+        </div>
+
+        {/* Per-instance status */}
+        <div className="divide-y divide-gray-50 max-h-[280px] overflow-y-auto">
+          {isLoading ? (
+            <div className="px-4 py-6 text-center text-xs text-gray-400">Verificando…</div>
+          ) : (
+            data?.instances.map((inst) => (
+              <div key={inst.instanceId} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Smartphone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                    <p className="text-sm font-medium text-gray-900 truncate">{inst.alias}</p>
+                  </div>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md shrink-0 ${
+                    inst.isOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                  }`}>
+                    {inst.isOk ? "✓ OK" : "Pendente"}
+                  </span>
+                </div>
+                {inst.currentHookUrl && inst.currentHookUrl !== data?.expectedHookUrl && (
+                  <p className="text-[10px] text-gray-400 truncate" title={inst.currentHookUrl}>
+                    Atual: <code className="text-red-500">{inst.currentHookUrl}</code>
+                  </p>
+                )}
+                {!inst.currentHookUrl && (
+                  <p className="text-[10px] text-amber-600">⚠️ Nenhuma URL configurada</p>
+                )}
+                {!inst.canCheck && (
+                  <p className="text-[10px] text-gray-400">Instância offline · não foi possível verificar</p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="px-4 py-2.5 border-t border-gray-50 bg-gray-50/40">
+          <button onClick={() => refetch()} className="text-[11px] text-gray-500 hover:text-gray-900 underline underline-offset-4">
+            Verificar novamente
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

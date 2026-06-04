@@ -231,8 +231,9 @@ export const appRouter = router({
       }),
 
     /**
-     * Configura automaticamente o hook URL de uma instância (ou todas) na WaboxApp
-     * para apontar pro nosso webhook. Garante que mensagens in+out sejam salvas.
+     * Configura automaticamente o hook URL via API WaboxApp.
+     * Algumas contas WaboxApp não permitem isso via API (só pelo painel admin) —
+     * nesse caso, o usuário deve copiar a URL e colar no painel manualmente.
      */
     setupWebhook: protectedProcedure
       .input(z.object({ id: z.number().optional() }).optional())
@@ -242,7 +243,6 @@ export const appRouter = router({
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure a chave da API primeiro." });
         }
 
-        // URL pública: usa o host da requisição (Cloudflare/Render)
         const proto = (ctx.req.headers["x-forwarded-proto"] as string) ?? ctx.req.protocol ?? "https";
         const host = (ctx.req.headers["x-forwarded-host"] as string) ?? ctx.req.headers.host;
         if (!host) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível detectar o host." });
@@ -254,13 +254,57 @@ export const appRouter = router({
 
         const results = await Promise.all(targets.map(async (inst) => {
           const r = await setHookUrl(config.token, inst.uid, hookUrl);
-          if (r.success) {
-            await updateInstanceStatus(inst.id, inst.status, { hookUrl });
-          }
+          if (r.success) await updateInstanceStatus(inst.id, inst.status, { hookUrl });
           return { instanceId: inst.id, alias: inst.alias ?? inst.uid, ok: r.success, error: r.error };
         }));
 
         return { hookUrl, results };
+      }),
+
+    /**
+     * Retorna o status do webhook por instância — URL esperada vs URL atualmente
+     * configurada na WaboxApp (puxa via /status, que retorna hook_url).
+     */
+    webhookStatus: protectedProcedure
+      .query(async ({ ctx }) => {
+        const config = await getApiConfig(OWNER_ID);
+        const proto = (ctx.req.headers["x-forwarded-proto"] as string) ?? ctx.req.protocol ?? "https";
+        const host = (ctx.req.headers["x-forwarded-host"] as string) ?? ctx.req.headers.host ?? "monitor.sougni.com";
+        const expectedHookUrl = `${proto}://${host}/api/webhook/waboxapp`;
+
+        const allInstances = await getInstances(OWNER_ID);
+
+        // Pra cada instância online com token, busca o hook_url atual no WaboxApp
+        const instances = await Promise.all(allInstances.map(async (inst) => {
+          let currentHookUrl: string | null = inst.hookUrl ?? null;
+          let canCheck = false;
+          if (config?.token) {
+            try {
+              const status = await checkInstanceStatus(config.token, inst.uid);
+              if (status.success && status.hook_url !== undefined) {
+                currentHookUrl = status.hook_url ?? null;
+                canCheck = true;
+                if (currentHookUrl !== inst.hookUrl) {
+                  await updateInstanceStatus(inst.id, inst.status, { hookUrl: currentHookUrl });
+                }
+              }
+            } catch {
+              // ignora
+            }
+          }
+          const isOk = currentHookUrl === expectedHookUrl;
+          return {
+            instanceId: inst.id,
+            alias: inst.alias ?? inst.uid,
+            uid: inst.uid,
+            status: inst.status,
+            currentHookUrl,
+            isOk,
+            canCheck,
+          };
+        }));
+
+        return { expectedHookUrl, instances };
       }),
   }),
 
