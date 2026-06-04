@@ -1145,3 +1145,321 @@ export async function getInboundMessageCount(contactId: number): Promise<number>
     );
   return Number(row?.count ?? 0);
 }
+
+// ─── Operation Center ────────────────────────────────────────────────────────
+
+export interface OperationKPIs {
+  tmaMinutes: number | null;      // Tempo Médio de Atendimento (duração da conversa)
+  tmeMinutes: number | null;      // Tempo Médio de Espera (1ª resposta)
+  slaPercent: number;             // % atendidos em ≤5min
+  totalAtendimentos: number;      // contatos com ≥1 interação no período
+  totalMessagesIn: number;
+  totalMessagesOut: number;
+  conversasAbertas: number;       // último msg=in sem out depois
+  conversasResolvidas: number;    // último msg=out
+  conversasInativas: number;      // sem msg há mais de 24h
+}
+
+export interface QueueItem {
+  contactId: number;
+  contactName: string | null;
+  contactUid: string;
+  instanceId: number;
+  instanceAlias: string | null;
+  lastMessageAt: Date;
+  lastMessageText: string;
+  waitMinutes: number;
+  inboundCount: number;
+}
+
+export interface OperatorPerformance {
+  instanceId: number;
+  alias: string;
+  uid: string;
+  status: string;
+  uniqueContacts: number;
+  messagesIn: number;
+  messagesOut: number;
+  responseRate: number;          // % de contatos que receberam resposta
+  avgResponseMin: number | null; // TME da operadora
+  avgConversationMin: number | null; // TMA
+  resolvedConversations: number;
+}
+
+export interface MessageTypeDistribution {
+  type: string;
+  count: number;
+  pct: number;
+}
+
+export async function getOperationOverview(
+  userId: number,
+  opts?: { dateFrom?: Date; dateTo?: Date }
+): Promise<{
+  kpis: OperationKPIs;
+  queue: QueueItem[];
+  operators: OperatorPerformance[];
+  messageTypes: MessageTypeDistribution[];
+  hourlyVolume: Array<{ hour: number; in: number; out: number }>;
+  dowVolume: Array<{ dow: number; label: string; total: number }>;
+}> {
+  const empty = {
+    kpis: { tmaMinutes: null, tmeMinutes: null, slaPercent: 0, totalAtendimentos: 0,
+            totalMessagesIn: 0, totalMessagesOut: 0,
+            conversasAbertas: 0, conversasResolvidas: 0, conversasInativas: 0 },
+    queue: [], operators: [], messageTypes: [], hourlyVolume: [], dowVolume: [],
+  };
+  const db = await getDb();
+  if (!db) return empty;
+
+  const userInsts = await db.select().from(instances).where(eq(instances.userId, userId));
+  const instIds = userInsts.map((i) => i.id);
+  if (!instIds.length) return empty;
+
+  const now = new Date();
+  const periodStart = opts?.dateFrom ?? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const periodEnd = new Date(opts?.dateTo ?? now);
+  periodEnd.setHours(23, 59, 59, 999);
+
+  const instIdsList = `ARRAY[${instIds.join(",")}]::int[]`;
+
+  // ─── KPIs principais ─────────────────────────────────────────────────────
+  // Usa CTE pra calcular first_in, first_out, last_msg por contato no período
+  const kpisRes = await db.execute(sql`
+    WITH per_contact AS (
+      SELECT
+        c.id AS contact_id,
+        MIN(CASE WHEN m.direction = 'in' THEN m."createdAt" END) AS first_in,
+        MIN(CASE WHEN m.direction = 'out' THEN m."createdAt" END) AS first_out,
+        MAX(m."createdAt") AS last_msg,
+        MIN(m."createdAt") AS first_msg,
+        COUNT(*) AS msg_count,
+        MAX(CASE WHEN m."createdAt" = (SELECT MAX(m2."createdAt") FROM messages m2 WHERE m2."contactId" = c.id) THEN m.direction END) AS last_dir
+      FROM contacts c
+      INNER JOIN messages m ON m."contactId" = c.id
+      WHERE c."instanceId" = ANY(${sql.raw(instIdsList)})
+        AND m."createdAt" >= ${periodStart} AND m."createdAt" <= ${periodEnd}
+      GROUP BY c.id
+    )
+    SELECT
+      AVG(EXTRACT(EPOCH FROM (last_msg - first_msg)) / 60.0) FILTER (WHERE msg_count > 1) AS tma_minutes,
+      AVG(EXTRACT(EPOCH FROM (first_out - first_in)) / 60.0) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in) AS tme_minutes,
+      COUNT(*) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in AND EXTRACT(EPOCH FROM (first_out - first_in)) <= 300) AS within_5min,
+      COUNT(*) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in) AS attended_count,
+      COUNT(*) AS total_atendimentos,
+      COUNT(*) FILTER (WHERE last_dir = 'in') AS conversas_abertas,
+      COUNT(*) FILTER (WHERE last_dir = 'out') AS conversas_resolvidas,
+      COUNT(*) FILTER (WHERE last_msg < NOW() - INTERVAL '24 hours') AS conversas_inativas
+    FROM per_contact
+  `);
+  const kpiRow = (kpisRes as unknown as { rows: any[] }).rows[0] ?? {};
+
+  // Total messages in/out
+  const [msgInRow] = await db.select({ count: sql<number>`COUNT(*)::int` })
+    .from(messages)
+    .where(and(inArray(messages.instanceId, instIds), eq(messages.direction, "in"),
+               gte(messages.createdAt, periodStart), lte(messages.createdAt, periodEnd)));
+  const [msgOutRow] = await db.select({ count: sql<number>`COUNT(*)::int` })
+    .from(messages)
+    .where(and(inArray(messages.instanceId, instIds), eq(messages.direction, "out"),
+               gte(messages.createdAt, periodStart), lte(messages.createdAt, periodEnd)));
+
+  const attendedCount = Number(kpiRow.attended_count ?? 0);
+  const within5 = Number(kpiRow.within_5min ?? 0);
+  const totalAtend = Number(kpiRow.total_atendimentos ?? 0);
+
+  const kpis: OperationKPIs = {
+    tmaMinutes: kpiRow.tma_minutes != null ? Math.round(Number(kpiRow.tma_minutes) * 10) / 10 : null,
+    tmeMinutes: kpiRow.tme_minutes != null ? Math.round(Number(kpiRow.tme_minutes) * 10) / 10 : null,
+    slaPercent: attendedCount > 0 ? Math.round((within5 / attendedCount) * 100) : 0,
+    totalAtendimentos: totalAtend,
+    totalMessagesIn: Number(msgInRow?.count ?? 0),
+    totalMessagesOut: Number(msgOutRow?.count ?? 0),
+    conversasAbertas: Number(kpiRow.conversas_abertas ?? 0),
+    conversasResolvidas: Number(kpiRow.conversas_resolvidas ?? 0),
+    conversasInativas: Number(kpiRow.conversas_inativas ?? 0),
+  };
+
+  // ─── Fila de Espera ─────────────────────────────────────────────────────
+  // Contatos cujo último msg é INBOUND (não respondido ainda)
+  const queueRes = await db.execute(sql`
+    WITH last_msg_per_contact AS (
+      SELECT DISTINCT ON (m."contactId")
+        m."contactId",
+        m."createdAt" AS msg_at,
+        m.direction,
+        m.body,
+        m.type
+      FROM messages m
+      WHERE m."instanceId" = ANY(${sql.raw(instIdsList)})
+        AND m."createdAt" > NOW() - INTERVAL '7 days'
+      ORDER BY m."contactId", m."createdAt" DESC
+    )
+    SELECT
+      c.id AS contact_id,
+      c.name AS contact_name,
+      c.uid AS contact_uid,
+      i.id AS instance_id,
+      i.alias AS instance_alias,
+      lm.msg_at AS last_message_at,
+      lm.body AS last_body,
+      lm.type AS last_type,
+      EXTRACT(EPOCH FROM (NOW() - lm.msg_at)) / 60.0 AS wait_min,
+      (SELECT COUNT(*) FROM messages m2 WHERE m2."contactId" = c.id AND m2.direction = 'in') AS inbound_count
+    FROM contacts c
+    INNER JOIN last_msg_per_contact lm ON lm."contactId" = c.id
+    INNER JOIN instances i ON i.id = c."instanceId"
+    WHERE lm.direction = 'in'
+      AND i."userId" = ${userId}
+    ORDER BY wait_min DESC
+    LIMIT 50
+  `);
+  const queue: QueueItem[] = ((queueRes as unknown as { rows: any[] }).rows ?? []).map((r) => {
+    let text = "";
+    try {
+      const body = typeof r.last_body === "string" ? JSON.parse(r.last_body) : r.last_body;
+      text = body?.text ?? body?.caption ?? `[${r.last_type ?? "msg"}]`;
+    } catch {
+      text = "[mensagem]";
+    }
+    return {
+      contactId: Number(r.contact_id),
+      contactName: r.contact_name,
+      contactUid: r.contact_uid,
+      instanceId: Number(r.instance_id),
+      instanceAlias: r.instance_alias,
+      lastMessageAt: new Date(r.last_message_at),
+      lastMessageText: String(text).slice(0, 200),
+      waitMinutes: Math.round(Number(r.wait_min) * 10) / 10,
+      inboundCount: Number(r.inbound_count ?? 0),
+    };
+  });
+
+  // ─── Performance por Operadora (instância) ─────────────────────────────
+  const opsRes = await db.execute(sql`
+    WITH msg_stats AS (
+      SELECT
+        m."instanceId",
+        COUNT(DISTINCT m."contactId") AS unique_contacts,
+        COUNT(*) FILTER (WHERE m.direction = 'in') AS msgs_in,
+        COUNT(*) FILTER (WHERE m.direction = 'out') AS msgs_out
+      FROM messages m
+      WHERE m."instanceId" = ANY(${sql.raw(instIdsList)})
+        AND m."createdAt" >= ${periodStart} AND m."createdAt" <= ${periodEnd}
+      GROUP BY m."instanceId"
+    ),
+    contact_stats AS (
+      SELECT
+        c."instanceId",
+        c.id AS contact_id,
+        MIN(CASE WHEN m.direction = 'in' THEN m."createdAt" END) AS first_in,
+        MIN(CASE WHEN m.direction = 'out' THEN m."createdAt" END) AS first_out,
+        MAX(m."createdAt") AS last_msg,
+        MIN(m."createdAt") AS first_msg,
+        MAX(CASE WHEN m."createdAt" = (SELECT MAX(m2."createdAt") FROM messages m2 WHERE m2."contactId" = c.id AND m2."createdAt" >= ${periodStart} AND m2."createdAt" <= ${periodEnd}) THEN m.direction END) AS last_dir,
+        COUNT(*) AS msg_count
+      FROM contacts c
+      INNER JOIN messages m ON m."contactId" = c.id
+      WHERE c."instanceId" = ANY(${sql.raw(instIdsList)})
+        AND m."createdAt" >= ${periodStart} AND m."createdAt" <= ${periodEnd}
+      GROUP BY c."instanceId", c.id
+    ),
+    contact_agg AS (
+      SELECT
+        "instanceId",
+        COUNT(*) AS total_contacts,
+        COUNT(*) FILTER (WHERE first_out IS NOT NULL) AS responded,
+        AVG(EXTRACT(EPOCH FROM (first_out - first_in)) / 60.0) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in) AS avg_response_min,
+        AVG(EXTRACT(EPOCH FROM (last_msg - first_msg)) / 60.0) FILTER (WHERE msg_count > 1) AS avg_conv_min,
+        COUNT(*) FILTER (WHERE last_dir = 'out') AS resolved
+      FROM contact_stats
+      GROUP BY "instanceId"
+    )
+    SELECT
+      i.id, i.alias, i.uid, i.status,
+      COALESCE(ms.unique_contacts, 0) AS unique_contacts,
+      COALESCE(ms.msgs_in, 0) AS msgs_in,
+      COALESCE(ms.msgs_out, 0) AS msgs_out,
+      COALESCE(ca.total_contacts, 0) AS total_contacts,
+      COALESCE(ca.responded, 0) AS responded,
+      ca.avg_response_min,
+      ca.avg_conv_min,
+      COALESCE(ca.resolved, 0) AS resolved
+    FROM instances i
+    LEFT JOIN msg_stats ms ON ms."instanceId" = i.id
+    LEFT JOIN contact_agg ca ON ca."instanceId" = i.id
+    WHERE i."userId" = ${userId}
+    ORDER BY ms.unique_contacts DESC NULLS LAST
+  `);
+  const operators: OperatorPerformance[] = ((opsRes as unknown as { rows: any[] }).rows ?? []).map((r) => {
+    const totalContacts = Number(r.total_contacts ?? 0);
+    const responded = Number(r.responded ?? 0);
+    return {
+      instanceId: Number(r.id),
+      alias: r.alias ?? r.uid,
+      uid: r.uid,
+      status: r.status ?? "unknown",
+      uniqueContacts: Number(r.unique_contacts ?? 0),
+      messagesIn: Number(r.msgs_in ?? 0),
+      messagesOut: Number(r.msgs_out ?? 0),
+      responseRate: totalContacts > 0 ? Math.round((responded / totalContacts) * 100) : 0,
+      avgResponseMin: r.avg_response_min != null ? Math.round(Number(r.avg_response_min) * 10) / 10 : null,
+      avgConversationMin: r.avg_conv_min != null ? Math.round(Number(r.avg_conv_min) * 10) / 10 : null,
+      resolvedConversations: Number(r.resolved ?? 0),
+    };
+  });
+
+  // ─── Distribuição por tipo de mensagem ────────────────────────────────
+  const typesRes = await db.select({
+    type: messages.type,
+    count: sql<number>`COUNT(*)::int`,
+  }).from(messages)
+    .where(and(inArray(messages.instanceId, instIds),
+               gte(messages.createdAt, periodStart), lte(messages.createdAt, periodEnd)))
+    .groupBy(messages.type)
+    .orderBy(desc(sql`COUNT(*)`));
+  const totalTypes = typesRes.reduce((s, r) => s + Number(r.count), 0);
+  const messageTypes: MessageTypeDistribution[] = typesRes.map((r) => ({
+    type: r.type,
+    count: Number(r.count),
+    pct: totalTypes > 0 ? Math.round((Number(r.count) / totalTypes) * 100) : 0,
+  }));
+
+  // ─── Volume horário (in vs out) ────────────────────────────────────────
+  const hourlyRes = await db.execute(sql`
+    SELECT
+      EXTRACT(hour FROM "createdAt")::int AS hour,
+      COUNT(*) FILTER (WHERE direction = 'in') AS msg_in,
+      COUNT(*) FILTER (WHERE direction = 'out') AS msg_out
+    FROM messages
+    WHERE "instanceId" = ANY(${sql.raw(instIdsList)})
+      AND "createdAt" >= ${periodStart} AND "createdAt" <= ${periodEnd}
+    GROUP BY hour
+    ORDER BY hour
+  `);
+  const hourlyMap = new Map<number, { in: number; out: number }>();
+  for (let h = 0; h < 24; h++) hourlyMap.set(h, { in: 0, out: 0 });
+  ((hourlyRes as unknown as { rows: any[] }).rows ?? []).forEach((r) => {
+    hourlyMap.set(Number(r.hour), { in: Number(r.msg_in ?? 0), out: Number(r.msg_out ?? 0) });
+  });
+  const hourlyVolume = Array.from(hourlyMap.entries()).map(([hour, v]) => ({ hour, in: v.in, out: v.out }));
+
+  // ─── Volume por dia da semana ──────────────────────────────────────────
+  const dowRes = await db.execute(sql`
+    SELECT EXTRACT(dow FROM "createdAt")::int AS dow, COUNT(*) AS total
+    FROM messages
+    WHERE "instanceId" = ANY(${sql.raw(instIdsList)})
+      AND "createdAt" >= ${periodStart} AND "createdAt" <= ${periodEnd}
+    GROUP BY dow
+    ORDER BY dow
+  `);
+  const dowLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const dowMap = new Map<number, number>();
+  for (let d = 0; d < 7; d++) dowMap.set(d, 0);
+  ((dowRes as unknown as { rows: any[] }).rows ?? []).forEach((r) => {
+    dowMap.set(Number(r.dow), Number(r.total ?? 0));
+  });
+  const dowVolume = Array.from(dowMap.entries()).map(([dow, total]) => ({ dow, label: dowLabels[dow] ?? "?", total }));
+
+  return { kpis, queue, operators, messageTypes, hourlyVolume, dowVolume };
+}

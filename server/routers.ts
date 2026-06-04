@@ -20,6 +20,7 @@ import {
   getContactsWithoutLabel,
   getDailyContactStats,
   getDashboardOverview,
+  getOperationOverview,
   getRealtimePulse,
   getFirstInboundMessages,
   getInstanceByUid,
@@ -422,6 +423,20 @@ export const appRouter = router({
           dateTo: input?.dateTo ? new Date(input.dateTo) : undefined,
           hospitals: input?.hospitals,
           procedures: input?.procedures,
+        });
+      }),
+
+    operation: protectedProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        return getOperationOverview(OWNER_ID, {
+          dateFrom: input?.dateFrom ? new Date(input.dateFrom) : undefined,
+          dateTo: input?.dateTo ? new Date(input.dateTo) : undefined,
         });
       }),
 
