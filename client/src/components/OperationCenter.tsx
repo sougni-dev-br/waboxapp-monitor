@@ -66,6 +66,7 @@ import {
 } from "recharts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { ConversationSheet } from "@/components/ConversationSheet";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -233,6 +234,42 @@ const TYPE_LABEL: Record<string, { label: string; icon: React.ComponentType<{ cl
   unknown:  { label: "Outro",       icon: HelpCircle,    color: "#9CA3AF" },
 };
 
+// ─── Webhook Button ───────────────────────────────────────────────────────────
+
+function WebhookButton() {
+  const [status, setStatus] = useState<"idle" | "running" | "ok" | "err">("idle");
+  const [detail, setDetail] = useState<string>("");
+  const utils = trpc.useUtils();
+  const setupMutation = trpc.instances.setupWebhook.useMutation({
+    onSuccess: (res) => {
+      const fail = res.results.filter((r) => !r.ok);
+      setStatus(fail.length === 0 ? "ok" : "err");
+      setDetail(fail.length === 0
+        ? `Webhook configurado em ${res.results.length} instância(s) → ${res.hookUrl}`
+        : `Erro em ${fail.length}: ${fail.map((f) => f.alias).join(", ")}`);
+      utils.instances.list.invalidate();
+    },
+    onError: (e) => { setStatus("err"); setDetail(e.message); },
+  });
+  return (
+    <div className="flex items-center gap-2">
+      {detail && (
+        <span className={`text-[10px] ${status === "ok" ? "text-emerald-600" : "text-red-500"} max-w-[260px] truncate`} title={detail}>
+          {detail}
+        </span>
+      )}
+      <button
+        onClick={() => { setStatus("running"); setupMutation.mutate(undefined); }}
+        disabled={setupMutation.isPending}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        title="Configurar webhook automaticamente em todas as instâncias"
+      >
+        {setupMutation.isPending ? "Configurando…" : status === "ok" ? "Webhook OK" : "Sincronizar webhook"}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function OperationCenter() {
@@ -240,6 +277,23 @@ export function OperationCenter() {
   const lastInvalidateRef = useRef(0);
   const { user, loading: authLoading } = useAuth();
   const utils = trpc.useUtils();
+
+  // ConversationSheet state — abre ao clicar em fila/contato
+  const [convoOpen, setConvoOpen] = useState(false);
+  const [convoTarget, setConvoTarget] = useState<{
+    contactId: number;
+    contactName?: string | null;
+    contactUid: string;
+    instanceAlias?: string | null;
+    instanceUid: string;
+    meta?: { label: string; value: string }[];
+  } | null>(null);
+
+  const openConversation = (t: typeof convoTarget) => {
+    if (!t) return;
+    setConvoTarget(t);
+    setConvoOpen(true);
+  };
 
   const dateFromStr = dateRange?.from ? toISODate(dateRange.from) : undefined;
   const dateToStr = dateRange?.to ? toISODate(dateRange.to) : undefined;
@@ -419,15 +473,26 @@ export function OperationCenter() {
                 const isUrgent = q.waitMinutes > 30;
                 const isVeryUrgent = q.waitMinutes > 120;
                 return (
-                  <motion.div
+                  <motion.button
                     key={q.contactId}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.03 * i, duration: 0.3 }}
-                    className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50/50 transition-colors group"
+                    onClick={() => openConversation({
+                      contactId: q.contactId,
+                      contactName: q.contactName,
+                      contactUid: q.contactUid,
+                      instanceAlias: q.instanceAlias,
+                      instanceUid: String(q.instanceId),
+                      meta: [
+                        { label: "Espera", value: fmtDuration(q.waitMinutes) },
+                        { label: "Recebidas", value: String(q.inboundCount) },
+                      ],
+                    })}
+                    className="w-full text-left flex items-center gap-4 px-5 py-3 hover:bg-gray-50/50 transition-colors group cursor-pointer"
                   >
                     <div className={`w-2 h-2 rounded-full ${isVeryUrgent ? "bg-red-500 animate-pulse" : isUrgent ? "bg-amber-500" : "bg-emerald-400"}`} />
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-600 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-600 shrink-0 group-hover:bg-[#DFFF00]/40 transition-colors">
                       {(q.contactName ?? q.contactUid).slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -444,7 +509,7 @@ export function OperationCenter() {
                       </p>
                       <p className="text-[10px] text-gray-400">{q.inboundCount} msg{q.inboundCount > 1 ? "s" : ""}</p>
                     </div>
-                  </motion.div>
+                  </motion.button>
                 );
               })}
               {queue.length > 10 && (
@@ -458,7 +523,9 @@ export function OperationCenter() {
 
         {/* ─── 03 · Performance por Operadora ──────────────────────── */}
         <SectionTitle index="03" title="Performance por Operadora"
-          subtitle="Cada instância WhatsApp = um canal de atendimento" />
+          subtitle="Cada instância WhatsApp = um canal de atendimento"
+          action={<WebhookButton />}
+        />
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="grid grid-cols-12 gap-2 px-5 py-3 border-b border-gray-50 text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
             <div className="col-span-3">Operadora</div>
@@ -627,6 +694,17 @@ export function OperationCenter() {
           </p>
         </div>
       </div>
+
+      <ConversationSheet
+        open={convoOpen}
+        onOpenChange={setConvoOpen}
+        contactId={convoTarget?.contactId ?? null}
+        contactName={convoTarget?.contactName}
+        contactUid={convoTarget?.contactUid}
+        instanceAlias={convoTarget?.instanceAlias}
+        instanceUid={convoTarget?.instanceUid}
+        meta={convoTarget?.meta}
+      />
     </div>
   );
 }

@@ -36,7 +36,7 @@ import {
   upsertContact,
   updateInstanceStatus,
 } from "./db";
-import { checkInstanceStatus, sendTextMessage } from "./waboxapp";
+import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 
@@ -228,6 +228,39 @@ export const appRouter = router({
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         return getStatusLogs(input.instanceId, input.limit ?? 50);
+      }),
+
+    /**
+     * Configura automaticamente o hook URL de uma instância (ou todas) na WaboxApp
+     * para apontar pro nosso webhook. Garante que mensagens in+out sejam salvas.
+     */
+    setupWebhook: protectedProcedure
+      .input(z.object({ id: z.number().optional() }).optional())
+      .mutation(async ({ input, ctx }) => {
+        const config = await getApiConfig(OWNER_ID);
+        if (!config?.token) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure a chave da API primeiro." });
+        }
+
+        // URL pública: usa o host da requisição (Cloudflare/Render)
+        const proto = (ctx.req.headers["x-forwarded-proto"] as string) ?? ctx.req.protocol ?? "https";
+        const host = (ctx.req.headers["x-forwarded-host"] as string) ?? ctx.req.headers.host;
+        if (!host) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível detectar o host." });
+        const hookUrl = `${proto}://${host}/api/webhook/waboxapp`;
+
+        const allInstances = await getInstances(OWNER_ID);
+        const targets = input?.id ? allInstances.filter((i) => i.id === input.id) : allInstances;
+        if (!targets.length) throw new TRPCError({ code: "NOT_FOUND", message: "Nenhuma instância encontrada." });
+
+        const results = await Promise.all(targets.map(async (inst) => {
+          const r = await setHookUrl(config.token, inst.uid, hookUrl);
+          if (r.success) {
+            await updateInstanceStatus(inst.id, inst.status, { hookUrl });
+          }
+          return { instanceId: inst.id, alias: inst.alias ?? inst.uid, ok: r.success, error: r.error };
+        }));
+
+        return { hookUrl, results };
       }),
   }),
 

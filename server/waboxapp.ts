@@ -45,6 +45,35 @@ export async function checkInstanceStatus(
 /**
  * Envia uma mensagem de texto via WaboxApp API.
  */
+/**
+ * Configura o hook URL de uma instância WhatsApp na WaboxApp.
+ * Usado para garantir que as mensagens (in/out) sejam enviadas pro nosso webhook.
+ */
+export async function setHookUrl(
+  token: string,
+  uid: string,
+  hookUrl: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const params = new URLSearchParams();
+    params.append("token", token);
+    params.append("uid", uid);
+    params.append("hook_url", hookUrl);
+
+    const response = await axios.post(`${BASE_URL}/sethook`, params.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 10000,
+    });
+    const data = response.data as { success?: boolean; error?: string };
+    return { success: !!data.success, error: data.error };
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && error.response) {
+      return { success: false, error: error.response.data?.error ?? "API error" };
+    }
+    return { success: false, error: "Network error" };
+  }
+}
+
 export async function sendTextMessage(
   token: string,
   uid: string,
