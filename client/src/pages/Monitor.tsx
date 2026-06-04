@@ -12,7 +12,7 @@ import { AddInstanceModal } from "@/components/AddInstanceModal";
 import { LabelsModal } from "@/components/LabelsModal";
 import { GlobalContactsView } from "@/components/GlobalContactsView";
 import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut } from "lucide-react";
-import { OperationalDash } from "@/components/OperationalDash";
+import { OperationalDashV2 as OperationalDash } from "@/components/OperationalDashV2";
 import { MidiaOnView } from "@/components/MidiaOnView";
 import { SougniLogo } from "@/components/SougniLogo";
 import { format } from "date-fns";
