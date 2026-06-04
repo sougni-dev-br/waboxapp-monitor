@@ -871,13 +871,17 @@ export async function getRealtimePulse(userId: number) {
     .limit(1);
 
   let lastMsgContactName: string | null = null;
+  let lastMsgContactUid: string | null = null;
   let lastMsgInstanceAlias: string | null = null;
+  let lastMsgInstanceUid: string | null = null;
   if (lastMsgRow) {
     const [contactRow] = await db.select({ name: contacts.name, uid: contacts.uid }).from(contacts)
       .where(eq(contacts.id, lastMsgRow.contactId)).limit(1);
     lastMsgContactName = contactRow?.name ?? contactRow?.uid ?? null;
+    lastMsgContactUid = contactRow?.uid ?? null;
     const inst = userInstances.find((i) => i.id === lastMsgRow.instanceId);
     lastMsgInstanceAlias = inst?.alias ?? inst?.uid ?? null;
+    lastMsgInstanceUid = inst?.uid ?? null;
   }
 
   const [topContactRow] = await db.select({
@@ -890,11 +894,18 @@ export async function getRealtimePulse(userId: number) {
     .limit(1);
 
   let topContactName: string | null = null;
+  let topContactUid: string | null = null;
+  let topContactInstanceId: number | null = null;
+  let topContactInstanceAlias: string | null = null;
   let topContactMsgCount = 0;
   if (topContactRow) {
-    const [cRow] = await db.select({ name: contacts.name, uid: contacts.uid }).from(contacts)
-      .where(eq(contacts.id, topContactRow.contactId)).limit(1);
+    const [cRow] = await db.select({ name: contacts.name, uid: contacts.uid, instanceId: contacts.instanceId })
+      .from(contacts).where(eq(contacts.id, topContactRow.contactId)).limit(1);
     topContactName = cRow?.name ?? cRow?.uid ?? null;
+    topContactUid = cRow?.uid ?? null;
+    topContactInstanceId = cRow?.instanceId ?? null;
+    const inst = userInstances.find((i) => i.id === topContactInstanceId);
+    topContactInstanceAlias = inst?.alias ?? inst?.uid ?? null;
     topContactMsgCount = Number(topContactRow.count);
   }
 
@@ -949,8 +960,12 @@ export async function getRealtimePulse(userId: number) {
       type: m.type,
       text: text ?? null,
       createdAt: m.createdAt,
+      contactId: m.contactId,
       contactName: contact?.name ?? contact?.uid ?? 'Desconhecido',
+      contactUid: contact?.uid ?? null,
+      instanceId: m.instanceId,
       instanceAlias: inst?.alias ?? inst?.uid ?? '?',
+      instanceUid: inst?.uid ?? null,
     };
   });
 
@@ -966,10 +981,21 @@ export async function getRealtimePulse(userId: number) {
     lastMessage: lastMsgRow ? {
       type: lastMsgRow.type,
       createdAt: lastMsgRow.createdAt,
+      contactId: lastMsgRow.contactId,
       contactName: lastMsgContactName,
+      contactUid: lastMsgContactUid,
+      instanceId: lastMsgRow.instanceId,
       instanceAlias: lastMsgInstanceAlias,
+      instanceUid: lastMsgInstanceUid,
     } : null,
-    topContact: topContactName ? { name: topContactName, msgCount: topContactMsgCount } : null,
+    topContact: topContactName ? {
+      name: topContactName,
+      contactId: topContactRow?.contactId ?? null,
+      contactUid: topContactUid,
+      instanceId: topContactInstanceId,
+      instanceAlias: topContactInstanceAlias,
+      msgCount: topContactMsgCount,
+    } : null,
     instancesStatus,
     lowBatteryInstances,
     onlineCount: userInstances.filter((i) => i.status === 'online').length,

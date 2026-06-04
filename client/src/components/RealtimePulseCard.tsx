@@ -5,6 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
+import { ConversationSheet } from "@/components/ConversationSheet";
 import {
   Zap,
   MessageSquare,
@@ -89,17 +90,28 @@ interface FeedItemProps {
   type: string;
   text: string | null;
   createdAt: Date | string;
+  contactId?: number;
   contactName: string;
+  contactUid?: string | null;
+  instanceId?: number;
   instanceAlias: string;
+  instanceUid?: string | null;
+  onClick?: (target: { contactId: number; contactName: string; contactUid?: string | null; instanceAlias: string; instanceUid?: string | null }) => void;
 }
 
-function FeedItem({ direction, type, text, createdAt, contactName, instanceAlias }: FeedItemProps) {
+function FeedItem({ direction, type, text, createdAt, contactId, contactName, contactUid, instanceAlias, instanceUid, onClick }: FeedItemProps) {
   const isIn = direction === "in";
+  const clickable = onClick && contactId != null;
+  const handleClick = () => {
+    if (!clickable) return;
+    onClick!({ contactId: contactId!, contactName, contactUid, instanceAlias, instanceUid });
+  };
   return (
     <motion.div
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
-      className="flex items-start gap-2.5 py-2 border-b border-gray-50 last:border-0"
+      onClick={handleClick}
+      className={`flex items-start gap-2.5 py-2 border-b border-gray-50 last:border-0 ${clickable ? "cursor-pointer hover:bg-gray-50/40 -mx-1 px-1 rounded-md transition-colors" : ""}`}
     >
       <div className={`mt-0.5 p-1 rounded-lg shrink-0 ${isIn ? "bg-blue-50" : "bg-gray-50"}`}>
         {isIn
@@ -132,6 +144,16 @@ function FeedItem({ direction, type, text, createdAt, contactName, instanceAlias
 export function RealtimePulseCard() {
   const [tick, setTick] = useState(0);
   const prevMsgs1min = useRef(0);
+
+  // ConversationSheet
+  const [convoOpen, setConvoOpen] = useState(false);
+  const [convoTarget, setConvoTarget] = useState<{
+    contactId: number; contactName?: string | null; contactUid?: string | null;
+    instanceAlias?: string | null; instanceUid?: string | null;
+  } | null>(null);
+  const openConvo = (t: { contactId: number; contactName: string; contactUid?: string | null; instanceAlias: string; instanceUid?: string | null }) => {
+    setConvoTarget(t); setConvoOpen(true);
+  };
   const [flashCount, setFlashCount] = useState(0);
 
   const { user, loading: authLoading } = useAuth();
@@ -313,8 +335,17 @@ export function RealtimePulseCard() {
         {/* ── Última Mensagem + Contato Mais Ativo ─────────────────────── */}
         <div className="grid grid-cols-1 gap-2">
           {data?.lastMessage && (
-            <div className="flex items-start gap-2.5 bg-gray-50 rounded-xl px-3 py-2.5">
-              <Clock className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+            <button
+              onClick={() => data.lastMessage?.contactId && openConvo({
+                contactId: data.lastMessage.contactId,
+                contactName: data.lastMessage.contactName ?? "",
+                contactUid: data.lastMessage.contactUid ?? undefined,
+                instanceAlias: data.lastMessage.instanceAlias ?? "",
+                instanceUid: data.lastMessage.instanceUid ?? undefined,
+              })}
+              className="w-full text-left flex items-start gap-2.5 bg-gray-50 rounded-xl px-3 py-2.5 hover:bg-gray-100 transition-colors group"
+            >
+              <Clock className="h-4 w-4 text-gray-400 shrink-0 mt-0.5 group-hover:text-gray-600" />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Última mensagem recebida</p>
                 <p className="text-sm font-semibold text-gray-800 truncate mt-0.5">
@@ -328,18 +359,27 @@ export function RealtimePulseCard() {
                   <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 rounded text-gray-500 font-medium">{msgTypeLabel(data.lastMessage.type)}</span>
                 </div>
               </div>
-            </div>
+            </button>
           )}
 
           {data?.topContact && (
-            <div className="flex items-start gap-2.5 bg-amber-50 rounded-xl px-3 py-2.5">
+            <button
+              onClick={() => data.topContact?.contactId && openConvo({
+                contactId: data.topContact.contactId,
+                contactName: data.topContact.name ?? "",
+                contactUid: data.topContact.contactUid ?? undefined,
+                instanceAlias: data.topContact.instanceAlias ?? "",
+                instanceUid: undefined,
+              })}
+              className="w-full text-left flex items-start gap-2.5 bg-amber-50 rounded-xl px-3 py-2.5 hover:bg-amber-100/80 transition-colors group"
+            >
               <Flame className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] text-amber-500 font-medium uppercase tracking-wide">Contato mais ativo (24h)</p>
                 <p className="text-sm font-semibold text-gray-800 truncate mt-0.5">{data.topContact.name}</p>
-                <p className="text-[11px] text-amber-600 mt-0.5">{fmt(data.topContact.msgCount)} mensagens</p>
+                <p className="text-[11px] text-amber-600 mt-0.5">{fmt(data.topContact.msgCount)} mensagens · ver conversa →</p>
               </div>
-            </div>
+            </button>
           )}
         </div>
 
@@ -357,7 +397,7 @@ export function RealtimePulseCard() {
             ) : (
               <AnimatePresence initial={false}>
                 {data.recentFeed.map((item) => (
-                  <FeedItem key={item.id} {...item} />
+                  <FeedItem key={item.id} {...item} onClick={openConvo} />
                 ))}
               </AnimatePresence>
             )}
@@ -378,6 +418,16 @@ export function RealtimePulseCard() {
         </div>
 
       </CardContent>
+
+      <ConversationSheet
+        open={convoOpen}
+        onOpenChange={setConvoOpen}
+        contactId={convoTarget?.contactId ?? null}
+        contactName={convoTarget?.contactName}
+        contactUid={convoTarget?.contactUid ?? undefined}
+        instanceAlias={convoTarget?.instanceAlias}
+        instanceUid={convoTarget?.instanceUid ?? undefined}
+      />
     </Card>
   );
 }

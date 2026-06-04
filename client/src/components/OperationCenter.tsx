@@ -632,13 +632,25 @@ export function OperationCenter() {
           <div className="divide-y divide-gray-50">
             {operators.map((op, i) => {
               const isOnline = op.status === "online";
+              const firstInQueue = queue.find((q) => q.instanceId === op.instanceId);
               return (
                 <motion.div
                   key={op.instanceId}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.03 * i }}
-                  className="grid grid-cols-12 gap-2 px-5 py-3 items-center hover:bg-gray-50/40 transition-colors"
+                  onClick={() => firstInQueue && openConversation({
+                    contactId: firstInQueue.contactId,
+                    contactName: firstInQueue.contactName,
+                    contactUid: firstInQueue.contactUid,
+                    instanceAlias: op.alias,
+                    instanceUid: op.uid,
+                    meta: [
+                      { label: "Operadora", value: op.alias },
+                      { label: "1ª da fila", value: fmtDuration(firstInQueue.waitMinutes) },
+                    ],
+                  })}
+                  className={`grid grid-cols-12 gap-2 px-5 py-3 items-center transition-colors ${firstInQueue ? "hover:bg-gray-50/40 cursor-pointer" : ""}`}
                 >
                   <div className="col-span-3 flex items-center gap-2.5 min-w-0">
                     <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${i === 0 ? "bg-[#DFFF00]/30" : "bg-gray-100"}`}>
