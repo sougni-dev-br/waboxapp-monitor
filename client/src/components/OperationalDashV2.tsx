@@ -169,6 +169,9 @@ const MOCK = {
 const fmtBRL = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
 
+const fmtBRL2 = (v: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+
 const fmtBRLCompact = (v: number) => {
   if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1).replace(".", ",")}M`;
   if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(1).replace(".", ",")}k`;
@@ -470,9 +473,9 @@ function IndicadoresMidia() {
         <MetricBox icon={MousePointerClick} iconBg="bg-blue-50" iconColor="text-blue-600"
           label="CTR médio" value={`${MOCK.media.ctr.toString().replace(".", ",")}%`} delta={3} hint="Acima da média do setor" />
         <MetricBox icon={DollarSign} iconBg="bg-violet-50" iconColor="text-violet-600"
-          label="CPC médio" value={fmtBRL(MOCK.media.cpc)} delta={-5} invertDelta hint="Quanto menor, melhor" />
+          label="CPC médio" value={fmtBRL2(MOCK.media.cpc)} delta={-5} invertDelta hint="Quanto menor, melhor" />
         <MetricBox icon={Target} iconBg="bg-rose-50" iconColor="text-rose-600"
-          label="CPL médio" value={fmtBRL(MOCK.media.cpl)} delta={-8} invertDelta hint="Custo por lead" />
+          label="CPL médio" value={fmtBRL2(MOCK.media.cpl)} delta={-8} invertDelta hint="Custo por lead" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
