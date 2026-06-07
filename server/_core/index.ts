@@ -58,6 +58,43 @@ async function startServer() {
     res.json({ ok: true, ts: Date.now() });
   });
 
+  // ─── Export pra PIPELINE (lido pelo Apps Script via UrlFetchApp) ──────────
+  //
+  // Dados retornados: telefone (uid WhatsApp) e nome (público nas conversas).
+  // Não há campos sensíveis (sem mensagens, sem dados financeiros, sem
+  // endereço/CPF). Endpoint é read-only e idempotente.
+  app.get("/api/export/leads-for-pipeline", async (_req, res) => {
+    try {
+      const { getInstances, getLeadsWithAggregatedText } = await import("../db");
+      const allInstances = await getInstances(1); // OWNER_ID
+      const instanceIds = allInstances.map((i) => i.id);
+      const leads = await getLeadsWithAggregatedText(instanceIds);
+
+      const REFRATIVA_REGEX =
+        /\b(refrativa|lasik|prk|miopia|m[ií]ope|astigmatismo|presbiopia|hipermetropia|grau\s+(no|nos)\s+olho)\b/i;
+
+      const out = leads.map((lead) => {
+        const alias = (lead.instanceAlias ?? "").toUpperCase();
+        const hospital = /\bHOPE\b/i.test(alias)
+          ? "HOPE"
+          : /\bCBV\b/i.test(alias)
+            ? "CBV"
+            : "H.Olhos";
+        const procedure = REFRATIVA_REGEX.test(lead.allText) ? "Refrativa" : "Catarata";
+        const phone = lead.uid.replace(/@(c|g)\.us$/, "").replace(/[^0-9]/g, "");
+        const d = lead.createdAt;
+        const dateEntered = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return [dateEntered, phone, lead.name ?? "", hospital, procedure];
+      });
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ total: out.length, rows: out });
+    } catch (err) {
+      console.error("[export pipeline]", err);
+      res.status(500).json({ error: "Falha ao processar leads" });
+    }
+  });
+
   // ─── SSE: push de status em tempo real para o frontend ─────────────────────
   app.get("/api/sse", (req, res) => {
     const userId = parseInt((req.query.userId as string) ?? "0", 10);
