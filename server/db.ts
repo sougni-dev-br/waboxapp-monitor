@@ -487,6 +487,10 @@ export async function getLeadsWithAggregatedText(
   const db = await getDb();
   if (!db || instanceIds.length === 0) return [];
 
+  // IDs vêm do nosso DB e são integers — interpolar literal é seguro
+  const idList = instanceIds.filter((n) => Number.isInteger(n)).join(",");
+  if (!idList) return [];
+
   // Query única: agrega body->text e body->caption por contato
   const rows = await db.execute(sql`
     SELECT
@@ -505,7 +509,7 @@ export async function getLeadsWithAggregatedText(
     FROM contacts c
     LEFT JOIN instances i ON i.id = c."instanceId"
     LEFT JOIN messages m ON m."contactId" = c.id
-    WHERE c."instanceId" = ANY(${instanceIds})
+    WHERE c."instanceId" IN (${sql.raw(idList)})
     GROUP BY c.id, c.uid, c.name, c.type, c."instanceId", i.alias, c."createdAt", c."messageCount"
     ORDER BY c."createdAt" ASC
   `);
