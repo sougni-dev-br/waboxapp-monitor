@@ -9,6 +9,7 @@ import { serveStatic, setupVite } from "./vite";
 import { addSSEClient, broadcastToUser, removeSSEClient } from "../sse";
 import { startPoller } from "../poller";
 import { startKeepAlive } from "../keepAlive";
+import { ensureAuthSchema } from "./migrate";
 import {
   applyLabelsToContact,
   contactHasLabel,
@@ -277,8 +278,14 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
+  server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Aplica migration/seed antes de qualquer trabalho de background
+    try {
+      await ensureAuthSchema();
+    } catch (err) {
+      console.error("[boot] ensureAuthSchema falhou (servidor continuará rodando):", err);
+    }
     startPoller();
     // Keep-alive ainda útil para evitar timeouts longos em proxies
     if (process.env.KEEP_ALIVE_ENABLED !== "false") {

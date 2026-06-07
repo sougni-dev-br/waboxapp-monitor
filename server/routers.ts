@@ -39,6 +39,7 @@ import {
 import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
+import { findUserByUsername, verifyPassword, touchLastSignedIn, PERMISSIONS } from "./auth";
 
 // ID fixo do painel (único usuário do sistema)
 const OWNER_ID = 1;
@@ -48,27 +49,43 @@ export const appRouter = router({
 
   // ─── Auth própria ────────────────────────────────────────────────────────────
   auth: router({
-    me: publicProcedure.query((opts) => {
-      if (opts.ctx.isAuthed) {
-        return { id: OWNER_ID, name: "Rafael", role: "admin" };
-      }
-      return null;
+    me: publicProcedure.query(({ ctx }) => {
+      if (!ctx.isAuthed || !ctx.user) return null;
+      return {
+        id: ctx.user.id,
+        username: ctx.user.username,
+        name: ctx.user.name,
+        email: ctx.user.email,
+        role: ctx.user.role,
+        // Lista completa de chaves liberadas para esse role — frontend usa
+        // pra esconder UI antes mesmo de pedir os dados.
+        permissions: Object.fromEntries(
+          Object.entries(PERMISSIONS).map(([k, roles]) => [k, roles.includes(ctx.user!.role)])
+        ),
+      };
     }),
 
     login: publicProcedure
-      .input(z.object({ password: z.string().min(1) }))
+      .input(z.object({
+        username: z.string().trim().min(1, "Usuário obrigatório").max(64),
+        password: z.string().min(1, "Senha obrigatória"),
+      }))
       .mutation(async ({ input, ctx }) => {
-        const panelPassword = process.env.PANEL_PASSWORD;
-        if (!panelPassword) {
-          console.error("[Auth] PANEL_PASSWORD não configurado no .env");
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Painel mal configurado. Contate o administrador." });
+        const username = input.username.toLowerCase();
+        const user = await findUserByUsername(username);
+        if (!user || !user.active) {
+          // Mensagem genérica pra não vazar quais usernames existem
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha incorretos." });
         }
-        if (input.password !== panelPassword) {
-          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha incorreta." });
+        const ok = await verifyPassword(input.password, user.passwordHash);
+        if (!ok) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha incorretos." });
         }
 
+        await touchLastSignedIn(user.id);
+
         const secret = new TextEncoder().encode(ENV.cookieSecret || "waboxapp-panel-secret");
-        const token = await new jose.SignJWT({ sub: "panel-owner", role: "admin" })
+        const token = await new jose.SignJWT({ sub: String(user.id), role: user.role, username: user.username })
           .setProtectedHeader({ alg: "HS256" })
           .setIssuedAt()
           .setExpirationTime("365d")
@@ -84,13 +101,21 @@ export const appRouter = router({
           path: cookiePath,
         });
 
-        return { success: true };
+        return {
+          success: true,
+          user: {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            role: user.role,
+          },
+        };
       }),
 
     // Renova o token silenciosamente — chamado pelo frontend a cada 7 dias
     refresh: protectedProcedure.mutation(async ({ ctx }) => {
       const secret = new TextEncoder().encode(ENV.cookieSecret || "waboxapp-panel-secret");
-      const token = await new jose.SignJWT({ sub: "panel-owner", role: "admin" })
+      const token = await new jose.SignJWT({ sub: String(ctx.user.id), role: ctx.user.role, username: ctx.user.username })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
         .setExpirationTime("365d")

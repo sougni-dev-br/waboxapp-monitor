@@ -38,16 +38,23 @@ export const users = pgTable(
   {
     id: serial("id").primaryKey(),
     openId: varchar("openId", { length: 64 }).notNull(),
+    /** Identificador de login (rafael, caio…). Lowercase, ASCII, unique. */
+    username: varchar("username", { length: 64 }),
+    /** Hash bcrypt da senha (nullable pra usuários legados sem senha local). */
+    passwordHash: varchar("passwordHash", { length: 128 }),
     name: text("name"),
     email: varchar("email", { length: 320 }),
     loginMethod: varchar("loginMethod", { length: 64 }),
     role: roleEnum("role").default("user").notNull(),
+    /** Se false, usuário não pode logar. */
+    active: boolean("active").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
     lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
   },
   (t) => ({
     openIdUnique: uniqueIndex("users_openId_unique").on(t.openId),
+    usernameUnique: uniqueIndex("users_username_unique").on(t.username),
   })
 );
 

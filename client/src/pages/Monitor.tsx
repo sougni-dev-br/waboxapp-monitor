@@ -17,6 +17,7 @@ import { MidiaOnView } from "@/components/MidiaOnView";
 import { OperationCenter } from "@/components/OperationCenter";
 import { SougniLogo } from "@/components/SougniLogo";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
 
 interface Instance {
@@ -50,6 +51,7 @@ type CenterView = "contacts" | "analytics" | "global" | "dashboard" | "midia" | 
 
 export default function Monitor() {
   const { data: authUser } = trpc.auth.me.useQuery(undefined, { retry: false, refetchOnWindowFocus: false });
+  const { user, can } = usePermissions();
   const { playAlert } = useAlertSound();
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => window.location.reload(),
@@ -293,20 +295,44 @@ export default function Monitor() {
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => setShowLabels(true)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
-          >
-            <Tag className="w-3.5 h-3.5" />
-            Marcadores
-          </button>
+          {can("manageLabels") && (
+            <button
+              onClick={() => setShowLabels(true)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
+            >
+              <Tag className="w-3.5 h-3.5" />
+              Marcadores
+            </button>
+          )}
 
-          <button
-            onClick={() => setShowConfig(true)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
-          >
-            Configurações
-          </button>
+          {can("manageConfig") && (
+            <button
+              onClick={() => setShowConfig(true)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
+            >
+              Configurações
+            </button>
+          )}
+
+          {/* Identidade do user logado */}
+          {user && (
+            <div
+              className="flex items-center gap-2 text-xs text-muted-foreground border-l border-border pl-3 ml-2"
+              title={`${user.name ?? user.username} · ${user.role === "admin" ? "Administrador" : "Usuário"}`}
+            >
+              <span
+                className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-foreground text-background text-[10px] font-bold uppercase"
+              >
+                {(user.name ?? user.username ?? "?").charAt(0)}
+              </span>
+              <span className="hidden md:inline text-foreground font-medium">{user.name ?? user.username}</span>
+              {user.role === "admin" && (
+                <span className="hidden lg:inline text-[10px] px-1.5 py-0.5 rounded bg-[#DFFF00]/20 text-[#11131F] font-bold uppercase tracking-wider">
+                  Admin
+                </span>
+              )}
+            </div>
+          )}
 
           <button
             onClick={() => {

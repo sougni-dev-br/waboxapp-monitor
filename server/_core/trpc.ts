@@ -24,5 +24,18 @@ const requireAuth = t.middleware(async (opts) => {
   });
 });
 
+const requireAdmin = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+
+  if (!ctx.isAuthed || !ctx.user) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "UNAUTHED" });
+  }
+  if (ctx.user.role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Sua conta não tem permissão para esta ação." });
+  }
+
+  return next({ ctx: { ...ctx, user: ctx.user } });
+});
+
 export const protectedProcedure = t.procedure.use(requireAuth);
-export const adminProcedure = t.procedure.use(requireAuth);
+export const adminProcedure = t.procedure.use(requireAdmin);
