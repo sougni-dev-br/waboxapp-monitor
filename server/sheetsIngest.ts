@@ -100,9 +100,17 @@ function normalizeHeader(h: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+/**
+ * URL default — planilha "WABOX 2.0 - DATA", aba CUSTOS publicada como CSV.
+ * Pode ser sobrescrita via env var SHEETS_CUSTOS_CSV_URL (ex.: pra trocar a
+ * planilha sem precisar de novo deploy).
+ */
+const DEFAULT_CUSTOS_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnz333oGQxwrQiIhPBTe2DuPjEcWDPIrXRMXxhEFIlvrZYK1l5-bL15BvX4dsn-S1c-UM99OORQYZk/pub?gid=613552359&single=true&output=csv";
+
 /** Lê e parseia o CSV das CUSTOS da planilha publicada. */
 export async function fetchCustos(): Promise<CustoRow[] | null> {
-  const url = process.env.SHEETS_CUSTOS_CSV_URL;
+  const url = process.env.SHEETS_CUSTOS_CSV_URL || DEFAULT_CUSTOS_CSV_URL;
   if (!url) {
     return null;
   }
