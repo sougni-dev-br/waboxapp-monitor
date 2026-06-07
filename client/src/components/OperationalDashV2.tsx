@@ -1159,10 +1159,13 @@ export function OperationalDashV2() {
     staleTime: 60_000,
   });
 
-  const leadsFromMonitor = overview?.totalLeadsInPeriod ?? 0;
+  // Fonte ÚNICA de leads: planilha PIPELINE (que é populada com os leads
+  // do monitor). Fallback pro monitor só quando a planilha estiver vazia
+  // ou indisponível — evita contar 2× os mesmos contatos.
   const leadsFromSheet = pipeline?.source === "sheet" ? pipeline.funnel.leads : 0;
-  // Total combinado: monitor + planilha (sem deduplicar — futuro: match por telefone)
-  const leadsInPeriod = leadsFromMonitor + leadsFromSheet;
+  const leadsFromMonitor = overview?.totalLeadsInPeriod ?? 0;
+  const leadsInPeriod = leadsFromSheet > 0 ? leadsFromSheet : leadsFromMonitor;
+
   const investmentTotal = investment?.source === "sheet" ? investment.total : 0;
   const cpl = leadsInPeriod > 0 && investmentTotal > 0 ? investmentTotal / leadsInPeriod : null;
 
