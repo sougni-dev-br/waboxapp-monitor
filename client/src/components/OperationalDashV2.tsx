@@ -3,7 +3,8 @@
  *
  * Fontes de dados:
  *   1. Aba CUSTOS da planilha publicada (trpc.dashboard.investment)
- *   2. Banco de dados do monitor (trpc.dashboard.overview)
+ *   2. Aba PIPELINE da planilha publicada (trpc.dashboard.pipeline)
+ *   3. Banco de dados do monitor (trpc.dashboard.overview)
  *
  * Tudo respeita o seletor de período global (DateRangeContext).
  */
@@ -29,6 +30,14 @@ import {
   Clock,
   CheckCircle2,
   Target,
+  CalendarCheck,
+  Stethoscope,
+  Scissors,
+  ChevronRight,
+  TrendingDown,
+  DollarSign,
+  UserCheck,
+  XCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -717,6 +726,420 @@ function InfraSection({ overview }: { overview: OverviewPayload | undefined }) {
   );
 }
 
+// ─── Pipeline Section (REAL — aba PIPELINE) ─────────────────────────────────
+
+interface PipelinePayload {
+  source: "sheet" | "unavailable" | "empty";
+  funnel: { leads: number; scheduled: number; consulted: number; surgeries: number; lost: number };
+  conversion: {
+    leadToScheduled: number;
+    scheduledToConsulted: number;
+    consultedToSurgery: number;
+    leadToSurgery: number;
+  };
+  revenue: number;
+  averageTicket: number;
+  funnelTime: {
+    leadToScheduledDays: number | null;
+    scheduledToConsultedDays: number | null;
+    consultedToSurgeryDays: number | null;
+  };
+  bySdr: Array<{
+    key: string;
+    leads: number;
+    scheduled: number;
+    surgeries: number;
+    revenue: number;
+    convPct: number;
+  }>;
+  byHospital: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+  byChannel: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+  byProcedure: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+  lossReasons: Array<{ key: string; count: number }>;
+  dailyLeads: Array<{ date: string; leads: number; surgeries: number }>;
+}
+
+function FunnelSection({ data }: { data: PipelinePayload | undefined }) {
+  if (!data) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
+        <p className="text-sm text-gray-400">Carregando funil da planilha...</p>
+      </div>
+    );
+  }
+  if (data.source === "unavailable") {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-700" />
+          <p className="text-sm font-semibold text-amber-900">Aba PIPELINE ainda não conectada</p>
+        </div>
+        <p className="text-xs text-amber-800/80 leading-relaxed">
+          Publique a aba PIPELINE da planilha como CSV pelo Arquivo → Compartilhar → Publicar na
+          web.
+        </p>
+      </div>
+    );
+  }
+  if (data.source === "empty" || data.funnel.leads === 0) {
+    return (
+      <EmptyState
+        title="Sem leads lançados no período"
+        description="A aba PIPELINE está conectada, mas não há leads com DATA ENTRADA dentro do range do filtro. Lance um lead por linha na PIPELINE pra ver o funil, SDRs, conversões e ROAS."
+        icon={Users}
+      />
+    );
+  }
+
+  const f = data.funnel;
+  const c = data.conversion;
+  const stages = [
+    { key: "Leads", value: f.leads, color: "#11131F", icon: Users },
+    { key: "Agendados", value: f.scheduled, color: "#1f2238", icon: CalendarCheck, conv: c.leadToScheduled },
+    { key: "Consultas", value: f.consulted, color: "#3a3d52", icon: Stethoscope, conv: c.scheduledToConsulted },
+    { key: "Cirurgias", value: f.surgeries, color: "#DFFF00", icon: Scissors, conv: c.consultedToSurgery },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs principais do funil */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Leads no período"
+          value={fmtNum(f.leads)}
+          hint={`${fmtNum(f.lost)} perdidos`}
+          accent="bg-[#DFFF00]/30"
+          icon={Users}
+        />
+        <KPICard
+          label="Conv Lead → Cirurgia"
+          value={`${c.leadToSurgery.toFixed(1)}%`}
+          hint={`${fmtNum(f.surgeries)} cirurgias`}
+          accent="bg-emerald-50"
+          icon={Target}
+        />
+        <KPICard
+          label="Taxa de agendamento"
+          value={`${c.leadToScheduled.toFixed(1)}%`}
+          hint={`${fmtNum(f.scheduled)} agendadas`}
+          accent="bg-blue-50"
+          icon={CalendarCheck}
+        />
+        <KPICard
+          label="Show-up consultas"
+          value={`${c.scheduledToConsulted.toFixed(1)}%`}
+          hint={`${fmtNum(f.consulted)} compareceram`}
+          accent="bg-violet-50"
+          icon={UserCheck}
+        />
+      </div>
+
+      {/* Funil visual horizontal */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-4">
+          Funil de vendas
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {stages.map((s, i) => {
+            const widthPct = f.leads > 0 ? (s.value / f.leads) * 100 : 0;
+            const Icon = s.icon;
+            return (
+              <div key={s.key} className="relative">
+                <div
+                  className="rounded-xl p-4 text-white relative overflow-hidden"
+                  style={{ background: s.color }}
+                >
+                  <div className="absolute top-2 right-2 opacity-30">
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold opacity-80">
+                    {s.key}
+                  </p>
+                  <p className={`mt-2 text-3xl font-bold tabular ${s.color === "#DFFF00" ? "text-[#11131F]" : ""}`}>
+                    {fmtNum(s.value)}
+                  </p>
+                  <p className={`mt-1 text-[10px] ${s.color === "#DFFF00" ? "text-[#11131F]/70" : "opacity-70"}`}>
+                    {widthPct.toFixed(0)}% do topo
+                    {s.conv != null && i > 0 && (
+                      <> · conv {s.conv.toFixed(0)}%</>
+                    )}
+                  </p>
+                </div>
+                {i < stages.length - 1 && (
+                  <ChevronRight className="hidden md:block absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 z-10" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <FunnelTimeChip
+            label="Lead → Agenda"
+            days={data.funnelTime.leadToScheduledDays}
+          />
+          <FunnelTimeChip
+            label="Agenda → Consulta"
+            days={data.funnelTime.scheduledToConsultedDays}
+          />
+          <FunnelTimeChip
+            label="Consulta → Cirurgia"
+            days={data.funnelTime.consultedToSurgeryDays}
+          />
+        </div>
+      </div>
+
+      {/* Gráfico diário de entrada vs cirurgias */}
+      {data.dailyLeads.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                Entrada diária de leads
+              </p>
+              <p className="text-sm text-gray-900 font-semibold">
+                {fmtNum(f.leads)} leads ·{" "}
+                {fmtNum(f.surgeries)} cirurgia{f.surgeries === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data.dailyLeads}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                tickFormatter={fmtDayShort}
+                interval="preserveStartEnd"
+              />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
+              <RTooltip
+                formatter={(v: number, name: string) => [
+                  fmtNum(v),
+                  name === "leads" ? "Leads" : "Cirurgias",
+                ]}
+                labelFormatter={(l) => fmtDayShort(String(l))}
+                contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+              />
+              <Bar dataKey="leads" fill="#11131F" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="surgeries" fill="#DFFF00" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FunnelTimeChip({ label, days }: { label: string; days: number | null }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+      <span className="text-gray-500">{label}</span>
+      <span className="font-semibold text-[#11131F] tabular">
+        {days != null ? `${days.toFixed(1)} dias` : "—"}
+      </span>
+    </div>
+  );
+}
+
+// ─── Financial Section (CUSTOS + PIPELINE) ───────────────────────────────────
+
+function FinancialSection({
+  investment,
+  pipeline,
+}: {
+  investment: InvestmentPayload | undefined;
+  pipeline: PipelinePayload | undefined;
+}) {
+  if (!investment || !pipeline) return null;
+
+  const inv = investment.source === "sheet" ? investment.total : 0;
+  const revenue = pipeline.source === "sheet" ? pipeline.revenue : 0;
+  const surgeries = pipeline.funnel.surgeries;
+  const ticket = pipeline.averageTicket;
+  const cac = surgeries > 0 ? inv / surgeries : null;
+  const roas = inv > 0 ? revenue / inv : null;
+  const roi = inv > 0 ? ((revenue - inv) / inv) * 100 : null;
+
+  const hasAny = inv > 0 || revenue > 0;
+  if (!hasAny) {
+    return (
+      <EmptyState
+        title="Sem dados financeiros"
+        description="Lance custos na aba CUSTOS e leads/cirurgias na aba PIPELINE pra ver receita, ticket, CAC, ROAS e ROI."
+        icon={DollarSign}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Receita total"
+          value={fmtMoney(revenue)}
+          hint={`${fmtNum(surgeries)} cirurgia${surgeries === 1 ? "" : "s"}`}
+          accent="bg-emerald-50"
+          icon={DollarSign}
+        />
+        <KPICard
+          label="Ticket médio"
+          value={ticket > 0 ? fmtMoney(ticket) : "—"}
+          hint="Receita ÷ cirurgias"
+          accent="bg-[#DFFF00]/30"
+          icon={Sparkles}
+        />
+        <KPICard
+          label="CAC por cirurgia"
+          value={cac != null ? fmtMoney(cac) : "—"}
+          hint="Investimento ÷ cirurgias"
+          accent="bg-amber-50"
+          icon={Wallet}
+        />
+        <KPICard
+          label="ROAS"
+          value={roas != null ? `${roas.toFixed(2)}x` : "—"}
+          hint={
+            roi != null
+              ? roi >= 0
+                ? `ROI +${roi.toFixed(0)}%`
+                : `ROI ${roi.toFixed(0)}%`
+              : "Sem investimento"
+          }
+          accent={roas != null && roas >= 1 ? "bg-emerald-50" : "bg-rose-50"}
+          icon={roas != null && roas >= 1 ? TrendingUp : TrendingDown}
+        />
+      </div>
+
+      {/* Performance por hospital / canal */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <PerformanceTable
+          title="Performance por hospital"
+          rows={pipeline.byHospital.slice(0, 6)}
+        />
+        <PerformanceTable
+          title="Performance por canal"
+          rows={pipeline.byChannel.slice(0, 6)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PerformanceTable({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+      <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">{title}</p>
+      <div className="space-y-2">
+        <div className="grid grid-cols-12 gap-2 text-[10px] uppercase tracking-wider text-gray-400 font-semibold pb-1 border-b border-gray-100">
+          <span className="col-span-5">Nome</span>
+          <span className="col-span-2 text-right">Leads</span>
+          <span className="col-span-2 text-right">Cirurg.</span>
+          <span className="col-span-3 text-right">Receita</span>
+        </div>
+        {rows.map((r) => (
+          <div key={r.key} className="grid grid-cols-12 gap-2 text-xs items-center py-1">
+            <span className="col-span-5 font-medium text-[#11131F] truncate" title={r.key}>
+              {r.key}
+            </span>
+            <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(r.leads)}</span>
+            <span className="col-span-2 text-right tabular text-gray-600">
+              {fmtNum(r.surgeries)}
+            </span>
+            <span className="col-span-3 text-right tabular font-semibold text-[#11131F]">
+              {r.revenue > 0 ? fmtMoney(r.revenue) : "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── SDR + Losses Section ────────────────────────────────────────────────────
+
+function SdrAndLossesSection({ pipeline }: { pipeline: PipelinePayload | undefined }) {
+  if (!pipeline || pipeline.source !== "sheet" || pipeline.funnel.leads === 0) return null;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* SDRs */}
+      {pipeline.bySdr.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">
+            Ranking de SDRs
+          </p>
+          <div className="space-y-2">
+            <div className="grid grid-cols-12 gap-2 text-[10px] uppercase tracking-wider text-gray-400 font-semibold pb-1 border-b border-gray-100">
+              <span className="col-span-4">SDR</span>
+              <span className="col-span-2 text-right">Leads</span>
+              <span className="col-span-2 text-right">Agend.</span>
+              <span className="col-span-2 text-right">Cirurg.</span>
+              <span className="col-span-2 text-right">Conv</span>
+            </div>
+            {pipeline.bySdr.slice(0, 8).map((s, i) => (
+              <div key={s.key} className="grid grid-cols-12 gap-2 text-xs items-center py-1">
+                <span className="col-span-4 flex items-center gap-1.5 min-w-0">
+                  {i === 0 && <span className="text-amber-500 text-sm">★</span>}
+                  <span className="font-medium text-[#11131F] truncate" title={s.key}>
+                    {s.key}
+                  </span>
+                </span>
+                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(s.leads)}</span>
+                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(s.scheduled)}</span>
+                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(s.surgeries)}</span>
+                <span className="col-span-2 text-right tabular font-semibold text-[#11131F]">
+                  {s.convPct.toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Motivos de perda */}
+      {pipeline.lossReasons.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">
+            Motivos de perda
+          </p>
+          <div className="space-y-2.5">
+            {pipeline.lossReasons.slice(0, 8).map((r) => {
+              const totalLost = pipeline.lossReasons.reduce((acc, x) => acc + x.count, 0);
+              const pct = totalLost > 0 ? (r.count / totalLost) * 100 : 0;
+              return (
+                <div key={r.key}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-1.5 font-medium text-[#11131F] truncate">
+                      <XCircle className="w-3 h-3 text-rose-400 flex-shrink-0" />
+                      {r.key}
+                    </span>
+                    <span className="text-gray-500 tabular ml-3">
+                      {fmtNum(r.count)} <span className="text-gray-300">·</span> {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-rose-300"
+                      style={{ width: `${Math.max(pct, 1.5)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export function OperationalDashV2() {
@@ -737,9 +1160,21 @@ export function OperationalDashV2() {
     staleTime: 60_000,
   });
 
-  const leadsInPeriod = overview?.totalLeadsInPeriod ?? 0;
+  const { data: pipeline } = trpc.dashboard.pipeline.useQuery(queryInput, {
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
+
+  const leadsFromMonitor = overview?.totalLeadsInPeriod ?? 0;
+  const leadsFromSheet = pipeline?.source === "sheet" ? pipeline.funnel.leads : 0;
+  // Total combinado: monitor + planilha (sem deduplicar — futuro: match por telefone)
+  const leadsInPeriod = leadsFromMonitor + leadsFromSheet;
   const investmentTotal = investment?.source === "sheet" ? investment.total : 0;
   const cpl = leadsInPeriod > 0 && investmentTotal > 0 ? investmentTotal / leadsInPeriod : null;
+
+  // Topo: ROAS quando há receita
+  const revenueFromSheet = pipeline?.source === "sheet" ? pipeline.revenue : 0;
+  const roas = investmentTotal > 0 && revenueFromSheet > 0 ? revenueFromSheet / investmentTotal : null;
 
   return (
     <div className="h-full overflow-y-auto bg-[#FAFAF7]">
@@ -763,7 +1198,7 @@ export function OperationalDashV2() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-4 text-xs flex-wrap">
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-wider text-gray-400">Investimento</p>
               <p className="text-base font-bold text-[#11131F] tabular">
@@ -784,11 +1219,16 @@ export function OperationalDashV2() {
             </div>
             <div className="h-8 w-px bg-gray-200" />
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">
-                Contatados
-              </p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Receita</p>
               <p className="text-base font-bold text-[#11131F] tabular">
-                {overview ? `${overview.contactedLeadsPercent.toFixed(1)}%` : "—"}
+                {revenueFromSheet > 0 ? fmtMoney(revenueFromSheet) : "—"}
+              </p>
+            </div>
+            <div className="h-8 w-px bg-gray-200" />
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">ROAS</p>
+              <p className="text-base font-bold text-[#11131F] tabular">
+                {roas != null ? `${roas.toFixed(2)}x` : "—"}
               </p>
             </div>
           </div>
@@ -805,6 +1245,30 @@ export function OperationalDashV2() {
 
         <Section
           index="02"
+          title="Funil de Vendas (Planilha PIPELINE)"
+          subtitle="Lead → Agendamento → Consulta → Cirurgia"
+        >
+          <FunnelSection data={pipeline} />
+        </Section>
+
+        <Section
+          index="03"
+          title="Financeiro (CUSTOS × PIPELINE)"
+          subtitle="Receita, ticket, CAC, ROAS e performance por hospital/canal"
+        >
+          <FinancialSection investment={investment} pipeline={pipeline} />
+        </Section>
+
+        <Section
+          index="04"
+          title="Performance & Perdas (PIPELINE)"
+          subtitle="Ranking de SDRs e principais motivos de perda"
+        >
+          <SdrAndLossesSection pipeline={pipeline} />
+        </Section>
+
+        <Section
+          index="05"
           title="Volume de Leads (Monitor)"
           subtitle="Contatos do waboxapp criados no período"
         >
@@ -812,7 +1276,7 @@ export function OperationalDashV2() {
         </Section>
 
         <Section
-          index="03"
+          index="06"
           title="Qualidade do Atendimento (Monitor)"
           subtitle="Velocidade de resposta e validade da base"
         >
@@ -820,7 +1284,7 @@ export function OperationalDashV2() {
         </Section>
 
         <Section
-          index="04"
+          index="07"
           title="Infraestrutura (Monitor)"
           subtitle="Status dos canais WhatsApp e volume bruto"
         >
@@ -829,7 +1293,7 @@ export function OperationalDashV2() {
 
         <div className="mt-16 text-center">
           <p className="text-[11px] text-gray-400">
-            Dashboard 100% real · fontes: aba CUSTOS da planilha + banco do monitor · Sougni 2026
+            Dashboard 100% real · fontes: abas CUSTOS + PIPELINE da planilha + banco do monitor · Sougni 2026
           </p>
         </div>
       </div>

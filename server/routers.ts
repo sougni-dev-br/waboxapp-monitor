@@ -40,7 +40,7 @@ import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 import { findUserByUsername, verifyPassword, touchLastSignedIn, PERMISSIONS } from "./auth";
-import { getInvestmentSummary } from "./sheetsIngest";
+import { getInvestmentSummary, getPipelineSummary } from "./sheetsIngest";
 
 // ID fixo do painel (único usuário do sistema)
 const OWNER_ID = 1;
@@ -576,6 +576,24 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         return getInvestmentSummary({
+          dateFrom: input?.dateFrom,
+          dateTo: input?.dateTo,
+        });
+      }),
+
+    /**
+     * Resumo de funil/vendas da aba PIPELINE. Devolve agregações por SDR,
+     * hospital, canal, procedimento + conversões + receita + tempos.
+     */
+    pipeline: protectedProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        return getPipelineSummary({
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
         });

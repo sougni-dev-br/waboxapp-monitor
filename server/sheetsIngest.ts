@@ -20,13 +20,26 @@ export interface CustoRow {
   note: string;
 }
 
-interface CachedFetch {
-  fetchedAt: number;
-  rows: CustoRow[];
-}
-
 const CACHE_TTL_MS = 60_000;
-let cache: { url: string; payload: CachedFetch } | null = null;
+const cache = new Map<string, { fetchedAt: number; text: string }>();
+
+async function fetchCsvText(url: string): Promise<string | null> {
+  const cached = cache.get(url);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.text;
+  try {
+    const res = await fetch(url, { headers: { Accept: "text/csv,text/plain" } });
+    if (!res.ok) {
+      console.warn(`[sheetsIngest] HTTP ${res.status} ao buscar ${url}`);
+      return cached?.text ?? null;
+    }
+    const text = await res.text();
+    cache.set(url, { fetchedAt: Date.now(), text });
+    return text;
+  } catch (err) {
+    console.error("[sheetsIngest] erro fetch:", err);
+    return cached?.text ?? null;
+  }
+}
 
 /** Tenta vários formatos comuns de data. Retorna YYYY-MM-DD ou null. */
 function parseDate(raw: string): string | null {
@@ -108,62 +121,65 @@ function normalizeHeader(h: string): string {
 const DEFAULT_CUSTOS_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnz333oGQxwrQiIhPBTe2DuPjEcWDPIrXRMXxhEFIlvrZYK1l5-bL15BvX4dsn-S1c-UM99OORQYZk/pub?gid=613552359&single=true&output=csv";
 
+/**
+ * Procura a linha do header de uma tabela ignorando linhas decorativas
+ * (título, subtítulos, KPIs etc). Retorna o índice da linha + array de headers
+ * normalizados, ou null se não encontrou.
+ */
+function findHeaderRow(
+  matrix: string[][],
+  required: string[]
+): { rowIdx: number; headers: string[] } | null {
+  for (let i = 0; i < matrix.length; i++) {
+    const norm = matrix[i].map(normalizeHeader);
+    if (required.every((r) => norm.includes(r))) {
+      return { rowIdx: i, headers: norm };
+    }
+  }
+  return null;
+}
+
 /** Lê e parseia o CSV das CUSTOS da planilha publicada. */
 export async function fetchCustos(): Promise<CustoRow[] | null> {
   const url = process.env.SHEETS_CUSTOS_CSV_URL || DEFAULT_CUSTOS_CSV_URL;
-  if (!url) {
-    return null;
-  }
-  if (cache && cache.url === url && Date.now() - cache.payload.fetchedAt < CACHE_TTL_MS) {
-    return cache.payload.rows;
-  }
-  try {
-    const res = await fetch(url, { headers: { Accept: "text/csv,text/plain" } });
-    if (!res.ok) {
-      console.warn(`[sheetsIngest] fetch CUSTOS falhou: HTTP ${res.status}`);
-      return cache?.payload.rows ?? null;
-    }
-    const text = await res.text();
-    const matrix = parseCSV(text).filter((r) => r.some((c) => c.trim().length > 0));
-    if (matrix.length === 0) return [];
+  if (!url) return null;
+  const text = await fetchCsvText(url);
+  if (text == null) return null;
+  const matrix = parseCSV(text).filter((r) => r.some((c) => c.trim().length > 0));
+  if (matrix.length === 0) return [];
 
-    const header = matrix[0].map(normalizeHeader);
-    const idx = {
-      date: header.findIndex((h) => h === "data" || h === "date" || h.startsWith("data")),
-      channel: header.findIndex((h) => h === "canal" || h === "channel"),
-      campaign: header.findIndex((h) => h === "campanha" || h === "campaign"),
-      hospital: header.findIndex((h) => h === "hospital"),
-      cost: header.findIndex((h) => h === "custo" || h === "custors" || h.startsWith("custo")),
-      note: header.findIndex((h) => h.startsWith("obs") || h === "note" || h === "observacao"),
-    };
+  const header = matrix[0].map(normalizeHeader);
+  const idx = {
+    date: header.findIndex((h) => h === "data" || h === "date" || h.startsWith("data")),
+    channel: header.findIndex((h) => h === "canal" || h === "channel"),
+    campaign: header.findIndex((h) => h === "campanha" || h === "campaign"),
+    hospital: header.findIndex((h) => h === "hospital"),
+    cost: header.findIndex((h) => h === "custo" || h === "custors" || h.startsWith("custo")),
+    note: header.findIndex((h) => h.startsWith("obs") || h === "note" || h === "observacao"),
+  };
 
-    if (idx.date < 0 || idx.cost < 0) {
-      console.warn("[sheetsIngest] colunas obrigatórias DATA/CUSTO não encontradas no CSV");
-      return [];
-    }
-
-    const rows: CustoRow[] = [];
-    for (let i = 1; i < matrix.length; i++) {
-      const r = matrix[i];
-      const date = parseDate(r[idx.date] ?? "");
-      if (!date) continue;
-      const cost = parseMoney(r[idx.cost] ?? "");
-      if (cost === 0 && !r[idx.note]) continue; // ignora linhas vazias
-      rows.push({
-        date,
-        channel: (r[idx.channel] ?? "").trim() || "—",
-        campaign: (r[idx.campaign] ?? "").trim() || "—",
-        hospital: (r[idx.hospital] ?? "").trim() || "—",
-        cost,
-        note: (r[idx.note] ?? "").trim(),
-      });
-    }
-    cache = { url, payload: { fetchedAt: Date.now(), rows } };
-    return rows;
-  } catch (err) {
-    console.error("[sheetsIngest] erro ao buscar CUSTOS:", err);
-    return cache?.payload.rows ?? null;
+  if (idx.date < 0 || idx.cost < 0) {
+    console.warn("[sheetsIngest] colunas DATA/CUSTO não encontradas em CUSTOS");
+    return [];
   }
+
+  const rows: CustoRow[] = [];
+  for (let i = 1; i < matrix.length; i++) {
+    const r = matrix[i];
+    const date = parseDate(r[idx.date] ?? "");
+    if (!date) continue;
+    const cost = parseMoney(r[idx.cost] ?? "");
+    if (cost === 0 && !r[idx.note]) continue;
+    rows.push({
+      date,
+      channel: (r[idx.channel] ?? "").trim() || "—",
+      campaign: (r[idx.campaign] ?? "").trim() || "—",
+      hospital: (r[idx.hospital] ?? "").trim() || "—",
+      cost,
+      note: (r[idx.note] ?? "").trim(),
+    });
+  }
+  return rows;
 }
 
 // ─── Aggregations ────────────────────────────────────────────────────────────
@@ -233,5 +249,294 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
     byCampaign: aggBy(scoped, (r) => r.campaign),
     byHospital: aggBy(scoped, (r) => r.hospital),
     daily,
+  };
+}
+
+// ─── PIPELINE ────────────────────────────────────────────────────────────────
+
+const DEFAULT_PIPELINE_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnz333oGQxwrQiIhPBTe2DuPjEcWDPIrXRMXxhEFIlvrZYK1l5-bL15BvX4dsn-S1c-UM99OORQYZk/pub?gid=590382630&single=true&output=csv";
+
+export interface PipelineLead {
+  /** YYYY-MM-DD da entrada do lead */
+  dateEntered: string;
+  phone: string;
+  name: string;
+  hospital: string;
+  procedure: string;
+  channel: string;
+  campaign: string;
+  sdr: string;
+  /** YYYY-MM-DD da data agendada (opcional) */
+  dateScheduled: string | null;
+  /** YYYY-MM-DD da consulta realizada (opcional) */
+  dateConsultation: string | null;
+  /** YYYY-MM-DD da cirurgia (opcional) */
+  dateSurgery: string | null;
+  /** Valor da cirurgia (0 se ainda não realizada) */
+  surgeryValue: number;
+  lossReason: string;
+  status:
+    | "Lead"
+    | "Consulta agendada"
+    | "Consulta realizada"
+    | "Cirurgia realizada"
+    | "Perdido"
+    | "—";
+}
+
+function computeStatus(r: {
+  dateScheduled: string | null;
+  dateConsultation: string | null;
+  dateSurgery: string | null;
+  lossReason: string;
+}): PipelineLead["status"] {
+  if (r.lossReason && r.lossReason.length > 0) return "Perdido";
+  if (r.dateSurgery) return "Cirurgia realizada";
+  if (r.dateConsultation) return "Consulta realizada";
+  if (r.dateScheduled) return "Consulta agendada";
+  return "Lead";
+}
+
+export async function fetchPipelineLeads(): Promise<PipelineLead[] | null> {
+  const url = process.env.SHEETS_PIPELINE_CSV_URL || DEFAULT_PIPELINE_CSV_URL;
+  if (!url) return null;
+  const text = await fetchCsvText(url);
+  if (text == null) return null;
+  const matrix = parseCSV(text);
+  if (matrix.length === 0) return [];
+
+  // Procura header com colunas mínimas obrigatórias
+  const headerInfo = findHeaderRow(matrix, ["dataentrada", "telefone", "hospital"]);
+  if (!headerInfo) {
+    console.warn("[sheetsIngest] header da PIPELINE não encontrado (DATA ENTRADA / TELEFONE / HOSPITAL)");
+    return [];
+  }
+
+  const h = headerInfo.headers;
+  const idx = {
+    dateEntered: h.findIndex((c) => c === "dataentrada"),
+    phone: h.findIndex((c) => c === "telefone"),
+    name: h.findIndex((c) => c === "nome"),
+    hospital: h.findIndex((c) => c === "hospital"),
+    procedure: h.findIndex((c) => c === "procedimento"),
+    channel: h.findIndex((c) => c === "canal"),
+    campaign: h.findIndex((c) => c === "campanha"),
+    sdr: h.findIndex((c) => c === "sdr"),
+    dateScheduled: h.findIndex((c) => c === "dataagendada"),
+    dateConsultation: h.findIndex((c) => c === "dataconsulta"),
+    dateSurgery: h.findIndex((c) => c === "datacirurgia"),
+    surgeryValue: h.findIndex((c) => c.startsWith("valorcirurgia")),
+    lossReason: h.findIndex((c) => c.startsWith("motivoperda") || c === "motivoperda"),
+  };
+
+  const leads: PipelineLead[] = [];
+  for (let i = headerInfo.rowIdx + 1; i < matrix.length; i++) {
+    const r = matrix[i];
+    if (!r.some((c) => c.trim())) continue;
+    const dateEntered = parseDate(r[idx.dateEntered] ?? "");
+    const phone = (r[idx.phone] ?? "").trim();
+    if (!dateEntered || !phone) continue;
+    const dateScheduled = parseDate(r[idx.dateScheduled] ?? "");
+    const dateConsultation = parseDate(r[idx.dateConsultation] ?? "");
+    const dateSurgery = parseDate(r[idx.dateSurgery] ?? "");
+    const surgeryValue = parseMoney(r[idx.surgeryValue] ?? "");
+    const lossReason = (r[idx.lossReason] ?? "").trim();
+    leads.push({
+      dateEntered,
+      phone,
+      name: (r[idx.name] ?? "").trim(),
+      hospital: (r[idx.hospital] ?? "").trim() || "—",
+      procedure: (r[idx.procedure] ?? "").trim() || "—",
+      channel: (r[idx.channel] ?? "").trim() || "—",
+      campaign: (r[idx.campaign] ?? "").trim() || "—",
+      sdr: (r[idx.sdr] ?? "").trim() || "—",
+      dateScheduled,
+      dateConsultation,
+      dateSurgery,
+      surgeryValue,
+      lossReason,
+      status: computeStatus({ dateScheduled, dateConsultation, dateSurgery, lossReason }),
+    });
+  }
+  return leads;
+}
+
+// ─── Pipeline aggregations ───────────────────────────────────────────────────
+
+export interface PipelineSummary {
+  source: "sheet" | "unavailable" | "empty";
+  range: { from: string | null; to: string | null };
+  /** Funil: counts em cada etapa */
+  funnel: {
+    leads: number;
+    scheduled: number;
+    consulted: number;
+    surgeries: number;
+    lost: number;
+  };
+  /** Conversões em % */
+  conversion: {
+    leadToScheduled: number;
+    scheduledToConsulted: number;
+    consultedToSurgery: number;
+    leadToSurgery: number;
+  };
+  /** Financeiro */
+  revenue: number;
+  averageTicket: number;
+  /** Tempo médio em dias entre etapas */
+  funnelTime: {
+    leadToScheduledDays: number | null;
+    scheduledToConsultedDays: number | null;
+    consultedToSurgeryDays: number | null;
+  };
+  /** Performance por SDR */
+  bySdr: Array<{
+    key: string;
+    leads: number;
+    scheduled: number;
+    surgeries: number;
+    revenue: number;
+    /** Conversão lead→cirurgia em % */
+    convPct: number;
+  }>;
+  /** Distribuição por hospital */
+  byHospital: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+  byChannel: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+  byProcedure: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
+  /** Motivos de perda */
+  lossReasons: Array<{ key: string; count: number }>;
+  /** Série diária de leads no período */
+  dailyLeads: Array<{ date: string; leads: number; surgeries: number }>;
+}
+
+function avgDays(from: (l: PipelineLead) => string | null, to: (l: PipelineLead) => string | null, leads: PipelineLead[]): number | null {
+  const diffs: number[] = [];
+  for (const l of leads) {
+    const a = from(l);
+    const b = to(l);
+    if (!a || !b) continue;
+    const ta = new Date(a + "T12:00:00Z").getTime();
+    const tb = new Date(b + "T12:00:00Z").getTime();
+    if (Number.isNaN(ta) || Number.isNaN(tb)) continue;
+    const days = (tb - ta) / (1000 * 60 * 60 * 24);
+    if (days >= 0) diffs.push(days);
+  }
+  if (diffs.length === 0) return null;
+  return diffs.reduce((acc, n) => acc + n, 0) / diffs.length;
+}
+
+function safePct(num: number, den: number): number {
+  if (den === 0) return 0;
+  return (num / den) * 100;
+}
+
+function aggSdr(leads: PipelineLead[]) {
+  const map = new Map<string, { leads: number; scheduled: number; surgeries: number; revenue: number }>();
+  for (const l of leads) {
+    const k = l.sdr || "—";
+    const e = map.get(k) ?? { leads: 0, scheduled: 0, surgeries: 0, revenue: 0 };
+    e.leads += 1;
+    if (l.dateScheduled) e.scheduled += 1;
+    if (l.dateSurgery) { e.surgeries += 1; e.revenue += l.surgeryValue; }
+    map.set(k, e);
+  }
+  return Array.from(map.entries())
+    .map(([key, v]) => ({ key, ...v, convPct: safePct(v.surgeries, v.leads) }))
+    .sort((a, b) => b.surgeries - a.surgeries || b.leads - a.leads);
+}
+
+function aggGroup(leads: PipelineLead[], pick: (l: PipelineLead) => string) {
+  const map = new Map<string, { leads: number; surgeries: number; revenue: number }>();
+  for (const l of leads) {
+    const k = pick(l) || "—";
+    const e = map.get(k) ?? { leads: 0, surgeries: 0, revenue: 0 };
+    e.leads += 1;
+    if (l.dateSurgery) { e.surgeries += 1; e.revenue += l.surgeryValue; }
+    map.set(k, e);
+  }
+  return Array.from(map.entries())
+    .map(([key, v]) => ({ key, ...v }))
+    .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
+}
+
+export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: string } = {}): Promise<PipelineSummary> {
+  const empty: PipelineSummary = {
+    source: "unavailable",
+    range: { from: opts.dateFrom ?? null, to: opts.dateTo ?? null },
+    funnel: { leads: 0, scheduled: 0, consulted: 0, surgeries: 0, lost: 0 },
+    conversion: { leadToScheduled: 0, scheduledToConsulted: 0, consultedToSurgery: 0, leadToSurgery: 0 },
+    revenue: 0,
+    averageTicket: 0,
+    funnelTime: { leadToScheduledDays: null, scheduledToConsultedDays: null, consultedToSurgeryDays: null },
+    bySdr: [],
+    byHospital: [],
+    byChannel: [],
+    byProcedure: [],
+    lossReasons: [],
+    dailyLeads: [],
+  };
+
+  const leads = await fetchPipelineLeads();
+  if (leads === null) return empty;
+
+  const scoped = leads.filter((l) => inRange(l.dateEntered, opts.dateFrom, opts.dateTo));
+
+  if (scoped.length === 0) {
+    return { ...empty, source: leads.length === 0 ? "empty" : "empty" };
+  }
+
+  const scheduled = scoped.filter((l) => !!l.dateScheduled).length;
+  const consulted = scoped.filter((l) => !!l.dateConsultation).length;
+  const surgeries = scoped.filter((l) => !!l.dateSurgery).length;
+  const lost = scoped.filter((l) => l.lossReason.length > 0).length;
+  const revenue = scoped.reduce((acc, l) => acc + (l.dateSurgery ? l.surgeryValue : 0), 0);
+
+  const dailyMap = new Map<string, { leads: number; surgeries: number }>();
+  for (const l of scoped) {
+    const e = dailyMap.get(l.dateEntered) ?? { leads: 0, surgeries: 0 };
+    e.leads += 1;
+    if (l.dateSurgery) e.surgeries += 1;
+    dailyMap.set(l.dateEntered, e);
+  }
+
+  const lossMap = new Map<string, number>();
+  for (const l of scoped) {
+    if (!l.lossReason) continue;
+    lossMap.set(l.lossReason, (lossMap.get(l.lossReason) ?? 0) + 1);
+  }
+
+  return {
+    source: "sheet",
+    range: { from: opts.dateFrom ?? null, to: opts.dateTo ?? null },
+    funnel: {
+      leads: scoped.length,
+      scheduled,
+      consulted,
+      surgeries,
+      lost,
+    },
+    conversion: {
+      leadToScheduled: safePct(scheduled, scoped.length),
+      scheduledToConsulted: safePct(consulted, scheduled),
+      consultedToSurgery: safePct(surgeries, consulted),
+      leadToSurgery: safePct(surgeries, scoped.length),
+    },
+    revenue,
+    averageTicket: surgeries > 0 ? revenue / surgeries : 0,
+    funnelTime: {
+      leadToScheduledDays: avgDays((l) => l.dateEntered, (l) => l.dateScheduled, scoped),
+      scheduledToConsultedDays: avgDays((l) => l.dateScheduled, (l) => l.dateConsultation, scoped),
+      consultedToSurgeryDays: avgDays((l) => l.dateConsultation, (l) => l.dateSurgery, scoped),
+    },
+    bySdr: aggSdr(scoped),
+    byHospital: aggGroup(scoped, (l) => l.hospital),
+    byChannel: aggGroup(scoped, (l) => l.channel),
+    byProcedure: aggGroup(scoped, (l) => l.procedure),
+    lossReasons: Array.from(lossMap.entries()).map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count),
+    dailyLeads: Array.from(dailyMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({ date, leads: v.leads, surgeries: v.surgeries })),
   };
 }
