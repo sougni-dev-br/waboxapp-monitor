@@ -16,6 +16,7 @@ import { OperationalDashV2 as OperationalDash } from "@/components/OperationalDa
 import { MidiaOnView } from "@/components/MidiaOnView";
 import { OperationCenter } from "@/components/OperationCenter";
 import { SougniLogo } from "@/components/SougniLogo";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { format } from "date-fns";
 
 interface Instance {
@@ -271,6 +272,11 @@ export default function Monitor() {
         </span>
 
         <div className="flex-1" />
+
+        {/* DateRangePicker global — visível só nas telas que consomem o range */}
+        {(centerView === "dashboard" || centerView === "global") && !selectedInstance && (
+          <DateRangePicker />
+        )}
 
         <div className="flex items-center gap-3">
           <StatusSummary instances={instances} />

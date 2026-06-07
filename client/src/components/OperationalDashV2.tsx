@@ -14,8 +14,13 @@
  *
  * Dados mockados — depois plugados ao backend.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useInView } from "framer-motion";
+import { trpc } from "@/lib/trpc";
+import { useDateRange } from "@/contexts/DateRangeContext";
+import { format as fmtDate } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Calendar as CalendarIcon } from "lucide-react";
 import {
   Activity,
   ArrowUpRight,
@@ -998,9 +1003,62 @@ function ChartCard({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function OperationalDashV2() {
+  const { from, to, fromISO, toISO, days } = useDateRange();
+
+  // Input estável para evitar refetches infinitos
+  const queryInput = useMemo(
+    () => ({ dateFrom: fromISO, dateTo: toISO }),
+    [fromISO, toISO]
+  );
+
+  const { data: overview } = trpc.dashboard.overview.useQuery(queryInput, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  const leadsInPeriod = overview?.totalLeadsInPeriod ?? 0;
+  const contactedPercent = overview?.contactedLeadsPercent ?? 0;
+  const avgTimeToContact = overview?.avgTimeToFirstContactMinutes;
+
   return (
     <div className="h-full overflow-y-auto bg-[#FAFAF7]">
       <div className="max-w-[1400px] mx-auto p-6 lg:p-10 pb-20">
+        {/* Faixa de período ativo — alimenta TODAS as métricas abaixo */}
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-3 px-4 py-3 rounded-2xl border border-[#11131F]/10 bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#DFFF00]/30 flex items-center justify-center">
+              <CalendarIcon className="w-4 h-4 text-[#11131F]" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
+                Período em análise
+              </p>
+              <p className="text-sm font-semibold text-gray-900 tabular">
+                {fmtDate(from, "dd 'de' MMM", { locale: ptBR })} → {fmtDate(to, "dd 'de' MMM 'de' yyyy", { locale: ptBR })}
+                <span className="ml-2 text-xs font-normal text-gray-400">· {days} {days === 1 ? "dia" : "dias"}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Leads (Monitor + Planilha)</p>
+              <p className="text-base font-bold text-[#11131F] tabular">{leadsInPeriod.toLocaleString("pt-BR")}</p>
+            </div>
+            <div className="h-8 w-px bg-gray-200" />
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Contatados</p>
+              <p className="text-base font-bold text-[#11131F] tabular">{contactedPercent.toFixed(1)}%</p>
+            </div>
+            <div className="h-8 w-px bg-gray-200" />
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Tempo até 1º contato</p>
+              <p className="text-base font-bold text-[#11131F] tabular">
+                {avgTimeToContact != null ? `${avgTimeToContact.toFixed(1)} min` : "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <HeroPriority />
 
         <Section index="01" title="Funil da Operação" subtitle="Da geração de lead à cirurgia realizada">

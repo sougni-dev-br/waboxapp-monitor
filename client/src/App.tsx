@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import { useEffect, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { DateRangeProvider } from "./contexts/DateRangeContext";
 import Monitor from "./pages/Monitor";
 import Login from "./pages/Login";
 import { trpc } from "./lib/trpc";
@@ -70,10 +71,12 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Toaster position="top-right" />
-          <Router />
-        </TooltipProvider>
+        <DateRangeProvider defaultPreset="30d">
+          <TooltipProvider>
+            <Toaster position="top-right" />
+            <Router />
+          </TooltipProvider>
+        </DateRangeProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

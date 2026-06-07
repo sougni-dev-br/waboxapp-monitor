@@ -3,13 +3,13 @@
  * com filtros de data (DD/MM/AAAA) e marcadores.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { Search, Download, MessageCircle, Users, User, Globe } from "lucide-react";
+import { Search, Download, MessageCircle, Users, User, Globe, Tag, ChevronDown, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { FilterBar } from "./FilterBar";
 import { formatPhoneUid } from "@/lib/formatPhone";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 interface Contact {
   id: number;
@@ -33,14 +33,26 @@ interface GlobalContactsViewProps {
 
 export function GlobalContactsView({ onSelectContact }: GlobalContactsViewProps) {
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState<string | undefined>();
-  const [dateTo, setDateTo] = useState<string | undefined>();
   const [labelId, setLabelId] = useState<number | null | undefined>(undefined);
+  const { fromISO, toISO, preset } = useDateRange();
 
   const { data: contacts = [], isLoading } = trpc.contacts.listAll.useQuery(
-    { dateFrom, dateTo, labelId },
+    { dateFrom: fromISO, dateTo: toISO, labelId },
     { refetchInterval: 60_000 }
   );
+
+  const { data: labels = [] } = trpc.labels.list.useQuery(undefined, { refetchInterval: 60_000 });
+  const selectedLabel = labels.find((l) => l.id === labelId);
+  const [labelOpen, setLabelOpen] = useState(false);
+  const labelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (labelRef.current && !labelRef.current.contains(e.target as Node)) setLabelOpen(false);
+    }
+    if (labelOpen) document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [labelOpen]);
 
   const filtered = useMemo(
     () =>
@@ -53,13 +65,7 @@ export function GlobalContactsView({ onSelectContact }: GlobalContactsViewProps)
     [contacts, search]
   );
 
-  const hasActiveFilter = !!(dateFrom || dateTo || labelId != null);
-
-  function handleFilterChange(f: { dateFrom?: string; dateTo?: string; labelId?: number | null }) {
-    setDateFrom(f.dateFrom);
-    setDateTo(f.dateTo);
-    setLabelId(f.labelId ?? undefined);
-  }
+  const hasActiveFilter = labelId != null || preset !== "30d";
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -72,7 +78,7 @@ export function GlobalContactsView({ onSelectContact }: GlobalContactsViewProps)
             <span className="text-xs text-gray-400">— todas as instâncias</span>
           </div>
           <button
-            onClick={() => exportToXLSX(filtered, { dateFrom, dateTo })}
+            onClick={() => exportToXLSX(filtered, { dateFrom: fromISO, dateTo: toISO })}
             disabled={filtered.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -81,15 +87,78 @@ export function GlobalContactsView({ onSelectContact }: GlobalContactsViewProps)
           </button>
         </div>
 
-        {/* FilterBar */}
-        <FilterBar
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          labelId={labelId}
-          onChange={handleFilterChange}
-          count={filtered.length}
-          total={contacts.length}
-        />
+        {/* Filtros — data vem do seletor global no header. Aqui só label. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative" ref={labelRef}>
+            <button
+              onClick={() => setLabelOpen((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${
+                labelId != null
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "text-gray-600 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {selectedLabel ? (
+                <>
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: selectedLabel.color ?? "#888" }}
+                  />
+                  {selectedLabel.name}
+                </>
+              ) : (
+                <>
+                  <Tag className="w-3.5 h-3.5" />
+                  Marcador
+                </>
+              )}
+              <ChevronDown className="w-3 h-3 opacity-60" />
+            </button>
+            {labelOpen && (
+              <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[180px]">
+                <button
+                  onClick={() => { setLabelId(undefined); setLabelOpen(false); }}
+                  className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 ${
+                    labelId == null ? "font-semibold text-gray-900" : "text-gray-600"
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-gray-300" />
+                  Todos os marcadores
+                </button>
+                {labels.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-gray-400 italic">Nenhum marcador criado</p>
+                )}
+                {labels.map((label) => (
+                  <button
+                    key={label.id}
+                    onClick={() => { setLabelId(label.id); setLabelOpen(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 ${
+                      labelId === label.id ? "font-semibold text-gray-900" : "text-gray-600"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: label.color ?? "#888" }} />
+                    {label.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {labelId != null && (
+            <button
+              onClick={() => setLabelId(undefined)}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg transition-colors"
+            >
+              <X className="w-3 h-3" />
+              Limpar
+            </button>
+          )}
+          <span className="ml-auto text-xs text-gray-400 tabular">
+            {filtered.length} {filtered.length === 1 ? "lead" : "leads"} no período
+            {filtered.length !== contacts.length && (
+              <span className="text-gray-300 ml-1">de {contacts.length}</span>
+            )}
+          </span>
+        </div>
 
         {/* Busca */}
         <div className="relative">
@@ -118,12 +187,12 @@ export function GlobalContactsView({ onSelectContact }: GlobalContactsViewProps)
                 ? "Nenhum contato no período/marcador selecionado."
                 : "Nenhuma conversa em nenhuma instância ainda."}
             </p>
-            {hasActiveFilter && !search && (
+            {labelId != null && !search && (
               <button
-                onClick={() => handleFilterChange({ dateFrom: undefined, dateTo: undefined, labelId: undefined })}
+                onClick={() => setLabelId(undefined)}
                 className="mt-3 text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
               >
-                Limpar filtros
+                Limpar marcador
               </button>
             )}
           </div>
