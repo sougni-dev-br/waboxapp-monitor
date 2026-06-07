@@ -1000,6 +1000,196 @@ function ChartCard({
   );
 }
 
+// ─── Investment Section (planilha real) ──────────────────────────────────────
+
+interface InvestmentPayload {
+  total: number;
+  lines: number;
+  source: "sheet" | "unavailable";
+  byChannel: { key: string; total: number; rows: number }[];
+  byCampaign: { key: string; total: number; rows: number }[];
+  byHospital: { key: string; total: number; rows: number }[];
+  daily: { date: string; cost: number }[];
+}
+
+function fmtMoney(value: number, frac = 0) {
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: frac,
+    maximumFractionDigits: frac,
+  });
+}
+
+function InvestmentSection({ data, leads }: { data: InvestmentPayload | undefined; leads: number }) {
+  if (!data) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
+        <p className="text-sm text-gray-400">Carregando custos da planilha...</p>
+      </div>
+    );
+  }
+
+  if (data.source === "unavailable") {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold text-xs">!</span>
+          <p className="text-sm font-semibold text-amber-900">Aba CUSTOS ainda não conectada</p>
+        </div>
+        <p className="text-xs text-amber-800/80 leading-relaxed">
+          Pra ver o investimento real aqui, publique a aba <b>CUSTOS</b> da planilha como CSV
+          (Arquivo → Compartilhar → Publicar na web → CUSTOS + Valores separados por vírgula)
+          e cole a URL no Render como <code className="bg-amber-100 px-1 rounded">SHEETS_CUSTOS_CSV_URL</code>.
+        </p>
+      </div>
+    );
+  }
+
+  const cpl = leads > 0 ? data.total / leads : null;
+  const topChannel = data.byChannel[0];
+  const topCampaign = data.byCampaign[0];
+  const topHospital = data.byHospital[0];
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Investimento total"
+          value={fmtMoney(data.total)}
+          hint={`${data.lines} lançamento${data.lines === 1 ? "" : "s"} no período`}
+          accent="bg-[#DFFF00]/15"
+        />
+        <KPICard
+          label="CPL (Custo por Lead)"
+          value={cpl != null ? fmtMoney(cpl, 2) : "—"}
+          hint={leads > 0 ? `${leads.toLocaleString("pt-BR")} leads no período` : "Sem leads ainda"}
+          accent="bg-emerald-50"
+        />
+        <KPICard
+          label="Canal #1"
+          value={topChannel?.key ?? "—"}
+          hint={topChannel ? fmtMoney(topChannel.total) : "Sem dados"}
+          accent="bg-blue-50"
+        />
+        <KPICard
+          label="Hospital #1"
+          value={topHospital?.key ?? "—"}
+          hint={topHospital ? fmtMoney(topHospital.total) : "Sem dados"}
+          accent="bg-rose-50"
+        />
+      </div>
+
+      {/* Distribuição por canal + por hospital */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BreakdownCard title="Por canal" items={data.byChannel} total={data.total} accent="#11131F" />
+        <BreakdownCard title="Por hospital" items={data.byHospital} total={data.total} accent="#11131F" />
+      </div>
+
+      {/* Por campanha */}
+      <BreakdownCard
+        title="Top campanhas"
+        items={data.byCampaign.slice(0, 8)}
+        total={data.total}
+        accent="#11131F"
+        full
+      />
+
+      {/* Série diária */}
+      {data.daily.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Investimento diário</p>
+              <p className="text-sm text-gray-900 font-semibold">
+                {data.daily.length} {data.daily.length === 1 ? "dia" : "dias"} com lançamentos
+              </p>
+            </div>
+            <p className="text-xs text-gray-400">
+              Pico: {fmtMoney(Math.max(...data.daily.map((d) => d.cost)))}
+            </p>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data.daily}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`} />
+              <RTooltip
+                formatter={(v: number) => [fmtMoney(v), "Custo"]}
+                labelFormatter={(l) => `Dia ${l}`}
+                contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+              />
+              <Bar dataKey="cost" fill="#11131F" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Nota */}
+      <p className="text-[11px] text-gray-400 text-center">
+        Fonte: aba CUSTOS da planilha Sougni — atualiza a cada 5 minutos
+        {topCampaign && <> · Campanha #1: <b className="text-[#11131F]">{topCampaign.key}</b> ({fmtMoney(topCampaign.total)})</>}
+      </p>
+    </div>
+  );
+}
+
+function KPICard({ label, value, hint, accent }: { label: string; value: string; hint: string; accent: string }) {
+  return (
+    <div className="relative bg-white rounded-2xl border border-gray-200 p-5 overflow-hidden">
+      <div className={`absolute top-0 right-0 w-24 h-24 rounded-full ${accent} blur-2xl opacity-50 -translate-y-6 translate-x-6`} />
+      <div className="relative">
+        <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{label}</p>
+        <p className="mt-2 text-2xl font-bold tracking-tight text-[#11131F] tabular truncate">{value}</p>
+        <p className="mt-1 text-[11px] text-gray-500 truncate">{hint}</p>
+      </div>
+    </div>
+  );
+}
+
+function BreakdownCard({
+  title,
+  items,
+  total,
+  accent,
+  full = false,
+}: {
+  title: string;
+  items: { key: string; total: number; rows: number }[];
+  total: number;
+  accent: string;
+  full?: boolean;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-5">
+      <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">{title}</p>
+      <div className={`space-y-2.5 ${full ? "" : "max-h-72 overflow-y-auto pr-1"}`}>
+        {items.map((it) => {
+          const pct = total > 0 ? (it.total / total) * 100 : 0;
+          return (
+            <div key={it.key}>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-medium text-[#11131F] truncate" title={it.key}>{it.key}</span>
+                <span className="text-gray-500 tabular ml-3 flex-shrink-0">
+                  {fmtMoney(it.total)} <span className="text-gray-300">·</span> {pct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${Math.max(pct, 1.5)}%`, background: accent }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function OperationalDashV2() {
@@ -1019,6 +1209,12 @@ export function OperationalDashV2() {
   const leadsInPeriod = overview?.totalLeadsInPeriod ?? 0;
   const contactedPercent = overview?.contactedLeadsPercent ?? 0;
   const avgTimeToContact = overview?.avgTimeToFirstContactMinutes;
+
+  // Investimento real puxado da aba CUSTOS via Sheets publicado
+  const { data: investment } = trpc.dashboard.investment.useQuery(queryInput, {
+    refetchInterval: 5 * 60_000, // CSV publicado atualiza ~5min
+    staleTime: 60_000,
+  });
 
   return (
     <div className="h-full overflow-y-auto bg-[#FAFAF7]">
@@ -1040,6 +1236,15 @@ export function OperationalDashV2() {
             </div>
           </div>
           <div className="flex items-center gap-4 text-xs">
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Investimento (CUSTOS)</p>
+              <p className="text-base font-bold text-[#11131F] tabular">
+                {investment?.source === "sheet"
+                  ? `R$ ${investment.total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`
+                  : "—"}
+              </p>
+            </div>
+            <div className="h-8 w-px bg-gray-200" />
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-wider text-gray-400">Leads (Monitor + Planilha)</p>
               <p className="text-base font-bold text-[#11131F] tabular">{leadsInPeriod.toLocaleString("pt-BR")}</p>
@@ -1065,7 +1270,15 @@ export function OperationalDashV2() {
           <FunilOperacao />
         </Section>
 
-        <Section index="02" title="Indicadores de Mídia" subtitle="Performance dos canais de aquisição">
+        <Section
+          index="02"
+          title="Investimento Real (Planilha)"
+          subtitle="Custos lançados na aba CUSTOS — alimenta CAC, ROAS e ROI da PIPELINE"
+        >
+          <InvestmentSection data={investment} leads={leadsInPeriod} />
+        </Section>
+
+        <Section index="02b" title="Indicadores de Mídia" subtitle="Performance dos canais de aquisição">
           <IndicadoresMidia />
         </Section>
 

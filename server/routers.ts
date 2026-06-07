@@ -40,6 +40,7 @@ import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 import { findUserByUsername, verifyPassword, touchLastSignedIn, PERMISSIONS } from "./auth";
+import { getInvestmentSummary } from "./sheetsIngest";
 
 // ID fixo do painel (único usuário do sistema)
 const OWNER_ID = 1;
@@ -559,6 +560,24 @@ export const appRouter = router({
           dateTo,
           hospitals: input?.hospitals,
           procedures: input?.procedures,
+        });
+      }),
+
+    /**
+     * Resumo de investimento puxado direto da aba CUSTOS da planilha publicada
+     * (env SHEETS_CUSTOS_CSV_URL). Cacheado por 60s no backend.
+     */
+    investment: protectedProcedure
+      .input(
+        z.object({
+          dateFrom: z.string().optional(),
+          dateTo: z.string().optional(),
+        }).optional()
+      )
+      .query(async ({ input }) => {
+        return getInvestmentSummary({
+          dateFrom: input?.dateFrom,
+          dateTo: input?.dateTo,
         });
       }),
   }),
