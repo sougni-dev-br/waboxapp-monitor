@@ -465,6 +465,65 @@ export async function getMessages(
     .offset(offset);
 }
 
+/**
+ * Retorna todos os contatos com todo o texto agregado das mensagens — usado
+ * pra inferir Catarata vs Refrativa em batch quando exportamos pra PIPELINE.
+ */
+export interface LeadWithText {
+  id: number;
+  uid: string;
+  name: string | null;
+  type: "user" | "group";
+  instanceId: number;
+  instanceAlias: string | null;
+  createdAt: Date;
+  messageCount: number;
+  allText: string;
+}
+
+export async function getLeadsWithAggregatedText(
+  instanceIds: number[]
+): Promise<LeadWithText[]> {
+  const db = await getDb();
+  if (!db || instanceIds.length === 0) return [];
+
+  // Query única: agrega body->text e body->caption por contato
+  const rows = await db.execute(sql`
+    SELECT
+      c.id,
+      c.uid,
+      c.name,
+      c.type::text AS type,
+      c."instanceId",
+      i.alias AS "instanceAlias",
+      c."createdAt",
+      c."messageCount",
+      COALESCE(string_agg(
+        COALESCE(m.body->>'text', m.body->>'caption', ''),
+        ' '
+      ), '') AS "allText"
+    FROM contacts c
+    LEFT JOIN instances i ON i.id = c."instanceId"
+    LEFT JOIN messages m ON m."contactId" = c.id
+    WHERE c."instanceId" = ANY(${instanceIds})
+    GROUP BY c.id, c.uid, c.name, c.type, c."instanceId", i.alias, c."createdAt", c."messageCount"
+    ORDER BY c."createdAt" ASC
+  `);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (rows.rows as any[]).map((r) => ({
+    id: Number(r.id),
+    uid: String(r.uid),
+    name: r.name ?? null,
+    type: r.type as "user" | "group",
+    instanceId: Number(r.instanceId),
+    instanceAlias: r.instanceAlias ?? null,
+    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
+    messageCount: Number(r.messageCount ?? 0),
+    allText: String(r.allText ?? ""),
+  }));
+}
+
 export async function insertMessage(data: InsertMessage): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB not available");

@@ -27,6 +27,7 @@ import {
   getInstances,
   getLabelRules,
   getLabels,
+  getLeadsWithAggregatedText,
   getMessages,
   getStatusLogs,
   insertMessage,
@@ -598,6 +599,73 @@ export const appRouter = router({
           dateTo: input?.dateTo,
         });
       }),
+
+    /**
+     * Processa TODOS os leads do monitor (contatos do waboxapp) e devolve
+     * pronto pra colar na aba PIPELINE da planilha:
+     *   { dateEntered, phone, name, hospital, procedure }
+     * - Hospital: alias contém HOPE → HOPE, CBV → CBV, resto → H.Olhos
+     * - Procedimento: concatena TODO o texto das mensagens, se bate regex
+     *   refrativa/lasik/prk/miopia/astigmatismo/presbiopia/hipermetropia → Refrativa
+     *   senão default Catarata
+     * - Inclui todos (groups e users) — você filtra depois na planilha
+     */
+    exportLeadsForPipeline: protectedProcedure.query(async () => {
+      const allInstances = await getInstances(OWNER_ID);
+      const instanceIds = allInstances.map((i) => i.id);
+
+      const leads = await getLeadsWithAggregatedText(instanceIds);
+
+      const REFRATIVA_REGEX =
+        /\b(refrativa|lasik|prk|miopia|m[ií]ope|astigmatismo|presbiopia|hipermetropia|grau\s+(no|nos)\s+olho)\b/i;
+
+      const out = leads.map((lead) => {
+        const alias = (lead.instanceAlias ?? "").toUpperCase();
+        let hospital: string;
+        if (/\bHOPE\b/i.test(alias)) hospital = "HOPE";
+        else if (/\bCBV\b/i.test(alias)) hospital = "CBV";
+        else hospital = "H.Olhos";
+
+        const procedure = REFRATIVA_REGEX.test(lead.allText) ? "Refrativa" : "Catarata";
+
+        // Telefone: limpa @c.us e @g.us pra deixar só dígitos
+        const phone = lead.uid.replace(/@(c|g)\.us$/, "").replace(/[^0-9]/g, "");
+
+        // Data: YYYY-MM-DD do firstMessageAt (= createdAt)
+        const d = lead.createdAt;
+        const dateEntered = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+        return {
+          dateEntered,
+          phone,
+          name: lead.name ?? "",
+          hospital,
+          procedure,
+          // Metadados pra debug / revisão
+          _type: lead.type,
+          _instanceAlias: lead.instanceAlias,
+          _messageCount: lead.messageCount,
+        };
+      });
+
+      return {
+        total: out.length,
+        countByHospital: {
+          HOPE: out.filter((l) => l.hospital === "HOPE").length,
+          CBV: out.filter((l) => l.hospital === "CBV").length,
+          "H.Olhos": out.filter((l) => l.hospital === "H.Olhos").length,
+        },
+        countByProcedure: {
+          Catarata: out.filter((l) => l.procedure === "Catarata").length,
+          Refrativa: out.filter((l) => l.procedure === "Refrativa").length,
+        },
+        countByType: {
+          user: out.filter((l) => l._type === "user").length,
+          group: out.filter((l) => l._type === "group").length,
+        },
+        leads: out,
+      };
+    }),
   }),
 
   // ─── Messages ──────────────────────────────────────────────────────────────
