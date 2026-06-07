@@ -114,6 +114,30 @@ function normalizeHeader(h: string): string {
 }
 
 /**
+ * Canônica para nomes de hospital. CUSTOS usa "HOLHOS", PIPELINE usa
+ * "H.Olhos" — normalizar pra um único nome evita duplicar buckets em
+ * breakdowns/cruzamentos.
+ */
+export function normalizeHospital(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const s = String(raw).trim();
+  if (!s) return "—";
+  const u = s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\s._\-]/g, "");
+  if (u.includes("HOPE")) return "HOPE";
+  if (u.includes("CBV")) return "CBV";
+  if (u.includes("HOLHOS")) return "HOLHOS";
+  if (u.includes("SANTALUZIA") || u.includes("SANTALUZ")) return "SANTA LUZIA";
+  if (u.includes("EINSTEIN")) return "EINSTEIN";
+  if (u.includes("SIRIO")) return "SIRIO";
+  if (u.includes("OFTALMOLOGIA")) return "OFTALMOLOGIA PAULISTA";
+  return s;
+}
+
+/**
  * URL default — planilha "WABOX 2.0 - DATA", aba CUSTOS publicada como CSV.
  * Pode ser sobrescrita via env var SHEETS_CUSTOS_CSV_URL (ex.: pra trocar a
  * planilha sem precisar de novo deploy).
@@ -174,7 +198,7 @@ export async function fetchCustos(): Promise<CustoRow[] | null> {
       date,
       channel: (r[idx.channel] ?? "").trim() || "—",
       campaign: (r[idx.campaign] ?? "").trim() || "—",
-      hospital: (r[idx.hospital] ?? "").trim() || "—",
+      hospital: normalizeHospital(r[idx.hospital]),
       cost,
       note: (r[idx.note] ?? "").trim(),
     });
@@ -344,7 +368,7 @@ export async function fetchPipelineLeads(): Promise<PipelineLead[] | null> {
       dateEntered,
       phone,
       name: (r[idx.name] ?? "").trim(),
-      hospital: (r[idx.hospital] ?? "").trim() || "—",
+      hospital: normalizeHospital(r[idx.hospital]),
       procedure: (r[idx.procedure] ?? "").trim() || "—",
       channel: (r[idx.channel] ?? "").trim() || "—",
       campaign: (r[idx.campaign] ?? "").trim() || "—",

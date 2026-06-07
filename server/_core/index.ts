@@ -79,7 +79,7 @@ async function startServer() {
           ? "HOPE"
           : /\bCBV\b/i.test(alias)
             ? "CBV"
-            : "H.Olhos";
+            : "HOLHOS";
         const procedure = REFRATIVA_REGEX.test(lead.allText) ? "Refrativa" : "Catarata";
         const phone = lead.uid.replace(/@(c|g)\.us$/, "").replace(/[^0-9]/g, "");
         const d = lead.createdAt;

@@ -41,7 +41,7 @@ import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 import { findUserByUsername, verifyPassword, touchLastSignedIn, PERMISSIONS } from "./auth";
-import { getInvestmentSummary, getPipelineSummary } from "./sheetsIngest";
+import { getInvestmentSummary, getPipelineSummary, normalizeHospital } from "./sheetsIngest";
 
 // ID fixo do painel (único usuário do sistema)
 const OWNER_ID = 1;
@@ -624,7 +624,7 @@ export const appRouter = router({
         let hospital: string;
         if (/\bHOPE\b/i.test(alias)) hospital = "HOPE";
         else if (/\bCBV\b/i.test(alias)) hospital = "CBV";
-        else hospital = "H.Olhos";
+        else hospital = "HOLHOS";
 
         const procedure = REFRATIVA_REGEX.test(lead.allText) ? "Refrativa" : "Catarata";
 

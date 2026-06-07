@@ -167,11 +167,13 @@ function BreakdownCard({
       <div className={`space-y-2.5 ${full ? "" : "max-h-72 overflow-y-auto pr-1"}`}>
         {items.map((it) => {
           const pct = total > 0 ? (it.total / total) * 100 : 0;
+          // Substitui placeholders ("—" / vazio) por rótulo amigável
+          const displayKey = !it.key || it.key === "—" ? "(sem dado)" : it.key;
           return (
             <div key={it.key}>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="font-medium text-[#11131F] truncate" title={it.key}>
-                  {it.key}
+                <span className={`font-medium truncate ${displayKey === "(sem dado)" ? "text-gray-400 italic" : "text-[#11131F]"}`} title={displayKey}>
+                  {displayKey}
                 </span>
                 <span className="text-gray-500 tabular ml-3 flex-shrink-0">
                   {fmt(it.total)} <span className="text-gray-300">·</span> {pct.toFixed(1)}%
@@ -562,7 +564,8 @@ function QualitySection({ overview }: { overview: OverviewPayload | undefined })
         <KPICard
           label="Tempo até 1º contato"
           value={
-            overview.avgTimeToFirstContactMinutes != null
+            overview.avgTimeToFirstContactMinutes != null &&
+            overview.avgTimeToFirstContactMinutes > 0
               ? `${overview.avgTimeToFirstContactMinutes.toFixed(1)} min`
               : "—"
           }
@@ -1019,10 +1022,12 @@ function PerformanceTable({
           <span className="col-span-2 text-right">Cirurg.</span>
           <span className="col-span-3 text-right">Receita</span>
         </div>
-        {rows.map((r) => (
+        {rows.map((r) => {
+          const displayKey = !r.key || r.key === "—" ? "(sem dado)" : r.key;
+          return (
           <div key={r.key} className="grid grid-cols-12 gap-2 text-xs items-center py-1">
-            <span className="col-span-5 font-medium text-[#11131F] truncate" title={r.key}>
-              {r.key}
+            <span className={`col-span-5 font-medium truncate ${displayKey === "(sem dado)" ? "text-gray-400 italic" : "text-[#11131F]"}`} title={displayKey}>
+              {displayKey}
             </span>
             <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(r.leads)}</span>
             <span className="col-span-2 text-right tabular text-gray-600">
@@ -1032,7 +1037,8 @@ function PerformanceTable({
               {r.revenue > 0 ? fmtMoney(r.revenue) : "—"}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
