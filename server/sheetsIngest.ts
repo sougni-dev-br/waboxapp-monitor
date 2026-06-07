@@ -243,7 +243,7 @@ export interface InvestmentSummary {
   daily: { date: string; cost: number }[];
 }
 
-export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string } = {}): Promise<InvestmentSummary> {
+export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string } = {}): Promise<InvestmentSummary> {
   const rows = await fetchCustos();
   if (rows === null) {
     return {
@@ -257,7 +257,12 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
       daily: [],
     };
   }
-  const scoped = rows.filter((r) => inRange(r.date, opts.dateFrom, opts.dateTo));
+  const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
+  const scoped = rows.filter(
+    (r) =>
+      inRange(r.date, opts.dateFrom, opts.dateTo) &&
+      (hospitalFilter == null || r.hospital === hospitalFilter)
+  );
   const total = scoped.reduce((acc, r) => acc + r.cost, 0);
   const dailyMap = new Map<string, number>();
   for (const r of scoped) dailyMap.set(r.date, (dailyMap.get(r.date) ?? 0) + r.cost);
@@ -457,7 +462,7 @@ function aggGroup(leads: PipelineLead[], pick: (l: PipelineLead) => string) {
     .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
 }
 
-export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: string } = {}): Promise<PipelineSummary> {
+export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string } = {}): Promise<PipelineSummary> {
   const empty: PipelineSummary = {
     source: "unavailable",
     range: { from: opts.dateFrom ?? null, to: opts.dateTo ?? null },
@@ -476,7 +481,12 @@ export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: str
   const leads = await fetchPipelineLeads();
   if (leads === null) return empty;
 
-  const scoped = leads.filter((l) => inRange(l.dateEntered, opts.dateFrom, opts.dateTo));
+  const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
+  const scoped = leads.filter(
+    (l) =>
+      inRange(l.dateEntered, opts.dateFrom, opts.dateTo) &&
+      (hospitalFilter == null || l.hospital === hospitalFilter)
+  );
 
   if (scoped.length === 0) {
     return { ...empty, source: leads.length === 0 ? "empty" : "empty" };

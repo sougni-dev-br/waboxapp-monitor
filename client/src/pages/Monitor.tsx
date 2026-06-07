@@ -17,6 +17,7 @@ import { MidiaOnView } from "@/components/MidiaOnView";
 import { OperationCenter } from "@/components/OperationCenter";
 import { SougniLogo } from "@/components/SougniLogo";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { HospitalFilterButtons } from "@/components/HospitalFilter";
 import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
 
@@ -275,9 +276,12 @@ export default function Monitor() {
 
         <div className="flex-1" />
 
-        {/* DateRangePicker global — visível só nas telas que consomem o range */}
+        {/* Filtros globais — visíveis só nas telas que consomem */}
         {(centerView === "dashboard" || centerView === "global") && !selectedInstance && (
-          <DateRangePicker />
+          <div className="flex items-center gap-2">
+            <DateRangePicker />
+            {centerView === "dashboard" && <HospitalFilterButtons />}
+          </div>
         )}
 
         <div className="flex items-center gap-3">

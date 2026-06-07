@@ -237,7 +237,7 @@ function InvestmentSection({
   if (!data) {
     return (
       <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-        <p className="text-sm text-gray-400">Carregando custos da planilha...</p>
+        <p className="text-sm text-gray-400">Carregando investimento...</p>
       </div>
     );
   }
@@ -246,7 +246,7 @@ function InvestmentSection({
     return (
       <EmptyState
         title="Sem investimento no período"
-        description="Lance custos diários (data, canal, campanha, hospital, valor) na aba CUSTOS da planilha. CPL, CAC e ROAS recalculam automaticamente."
+        description="Lance custos diários (data, canal, campanha, hospital, valor). CPL, CAC e ROAS recalculam automaticamente."
         icon={Wallet}
       />
     );
@@ -343,16 +343,11 @@ function InvestmentSection({
         </div>
       )}
 
-      <p className="text-[11px] text-gray-400 text-center">
-        Fonte: aba CUSTOS da planilha · atualiza a cada 5 min
-        {topCampaign && (
-          <>
-            {" "}
-            · Campanha #1: <b className="text-[#11131F]">{topCampaign.key}</b> (
-            {fmtMoney(topCampaign.total)})
-          </>
-        )}
-      </p>
+      {topCampaign && (
+        <p className="text-[11px] text-gray-400 text-center">
+          Campanha #1: <b className="text-[#11131F]">{topCampaign.key}</b> ({fmtMoney(topCampaign.total)})
+        </p>
+      )}
     </div>
   );
 }
@@ -401,7 +396,7 @@ function LeadsSection({ overview }: { overview: OverviewPayload | undefined }) {
   if (!overview) {
     return (
       <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-        <p className="text-sm text-gray-400">Carregando dados do monitor...</p>
+        <p className="text-sm text-gray-400">Carregando dados...</p>
       </div>
     );
   }
@@ -410,7 +405,7 @@ function LeadsSection({ overview }: { overview: OverviewPayload | undefined }) {
     return (
       <EmptyState
         title="Nenhum lead no período"
-        description="Não há contatos do monitor (waboxapp) com primeira mensagem dentro do range selecionado."
+        description="Não há leads com primeira mensagem dentro do range selecionado."
         icon={Users}
       />
     );
@@ -742,29 +737,24 @@ function FunnelSection({ data }: { data: PipelinePayload | undefined }) {
   if (!data) {
     return (
       <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-        <p className="text-sm text-gray-400">Carregando funil da planilha...</p>
+        <p className="text-sm text-gray-400">Carregando funil...</p>
       </div>
     );
   }
   if (data.source === "unavailable") {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-2">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-amber-700" />
-          <p className="text-sm font-semibold text-amber-900">Aba PIPELINE ainda não conectada</p>
-        </div>
-        <p className="text-xs text-amber-800/80 leading-relaxed">
-          Publique a aba PIPELINE da planilha como CSV pelo Arquivo → Compartilhar → Publicar na
-          web.
-        </p>
-      </div>
+      <EmptyState
+        title="Sem dados de funil"
+        description="Lance leads pra ver funil, conversões e ROAS."
+        icon={Users}
+      />
     );
   }
   if (data.source === "empty" || data.funnel.leads === 0) {
     return (
       <EmptyState
-        title="Sem leads lançados no período"
-        description="A aba PIPELINE está conectada, mas não há leads com DATA ENTRADA dentro do range do filtro. Lance um lead por linha na PIPELINE pra ver o funil, SDRs, conversões e ROAS."
+        title="Sem leads no período"
+        description="Não há leads com data de entrada dentro do range do filtro."
         icon={Users}
       />
     );
@@ -944,7 +934,7 @@ function FinancialSection({
     return (
       <EmptyState
         title="Sem dados financeiros"
-        description="Lance custos na aba CUSTOS e leads/cirurgias na aba PIPELINE pra ver receita, ticket, CAC, ROAS e ROI."
+        description="Lance custos e leads/cirurgias pra ver receita, ticket, CAC, ROAS e ROI."
         icon={DollarSign}
       />
     );
@@ -1127,24 +1117,29 @@ function LossesSection({ pipeline }: { pipeline: PipelinePayload | undefined }) 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export function OperationalDashV2() {
-  const { from, to, fromISO, toISO, days } = useDateRange();
+  const { from, to, fromISO, toISO, days, hospital } = useDateRange();
 
-  const queryInput = useMemo(
-    () => ({ dateFrom: fromISO, dateTo: toISO }),
-    [fromISO, toISO]
+  // Input estável; overview espera hospitals[] e os outros esperam hospital (string)
+  const overviewInput = useMemo(
+    () => ({ dateFrom: fromISO, dateTo: toISO, hospitals: hospital ? [hospital] : undefined }),
+    [fromISO, toISO, hospital]
+  );
+  const sheetInput = useMemo(
+    () => ({ dateFrom: fromISO, dateTo: toISO, hospital: hospital ?? undefined }),
+    [fromISO, toISO, hospital]
   );
 
-  const { data: overview } = trpc.dashboard.overview.useQuery(queryInput, {
+  const { data: overview } = trpc.dashboard.overview.useQuery(overviewInput, {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
 
-  const { data: investment } = trpc.dashboard.investment.useQuery(queryInput, {
+  const { data: investment } = trpc.dashboard.investment.useQuery(sheetInput, {
     refetchInterval: 5 * 60_000,
     staleTime: 60_000,
   });
 
-  const { data: pipeline } = trpc.dashboard.pipeline.useQuery(queryInput, {
+  const { data: pipeline } = trpc.dashboard.pipeline.useQuery(sheetInput, {
     refetchInterval: 5 * 60_000,
     staleTime: 60_000,
   });
@@ -1221,18 +1216,18 @@ export function OperationalDashV2() {
           </div>
         </div>
 
-        {/* ─── Seções reais ─── */}
+        {/* ─── Seções ─── */}
         <Section
           index="01"
-          title="Investimento (Planilha CUSTOS)"
-          subtitle="Custos lançados na aba CUSTOS · alimenta CPL e CAC"
+          title="Investimento"
+          subtitle="Alimenta CPL e CAC"
         >
           <InvestmentSection data={investment} leads={leadsInPeriod} />
         </Section>
 
         <Section
           index="02"
-          title="Funil de Vendas (Planilha PIPELINE)"
+          title="Funil de Vendas"
           subtitle="Lead → Agendamento → Consulta → Cirurgia"
         >
           <FunnelSection data={pipeline} />
@@ -1240,7 +1235,7 @@ export function OperationalDashV2() {
 
         <Section
           index="03"
-          title="Financeiro (CUSTOS × PIPELINE)"
+          title="Financeiro"
           subtitle="Receita, ticket, CAC, ROAS e performance por hospital/canal"
         >
           <FinancialSection investment={investment} pipeline={pipeline} />
@@ -1248,7 +1243,7 @@ export function OperationalDashV2() {
 
         <Section
           index="04"
-          title="Procedimentos & Perdas (PIPELINE)"
+          title="Procedimentos & Perdas"
           subtitle="Performance por procedimento e principais motivos de perda"
         >
           <LossesSection pipeline={pipeline} />
@@ -1256,15 +1251,15 @@ export function OperationalDashV2() {
 
         <Section
           index="05"
-          title="Volume de Leads (Monitor)"
-          subtitle="Contatos do waboxapp criados no período"
+          title="Volume de Leads"
+          subtitle="Leads criados no período"
         >
           <LeadsSection overview={overview} />
         </Section>
 
         <Section
           index="06"
-          title="Qualidade do Atendimento (Monitor)"
+          title="Qualidade do Atendimento"
           subtitle="Velocidade de resposta e validade da base"
         >
           <QualitySection overview={overview} />
@@ -1272,16 +1267,14 @@ export function OperationalDashV2() {
 
         <Section
           index="07"
-          title="Infraestrutura (Monitor)"
-          subtitle="Status dos canais WhatsApp e volume bruto"
+          title="Infraestrutura"
+          subtitle="Status dos canais e volume bruto"
         >
           <InfraSection overview={overview} />
         </Section>
 
         <div className="mt-16 text-center">
-          <p className="text-[11px] text-gray-400">
-            Dashboard 100% real · fontes: abas CUSTOS + PIPELINE da planilha + banco do monitor · Sougni 2026
-          </p>
+          <p className="text-[11px] text-gray-400">Sougni · 2026</p>
         </div>
       </div>
     </div>

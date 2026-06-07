@@ -573,12 +573,14 @@ export const appRouter = router({
         z.object({
           dateFrom: z.string().optional(),
           dateTo: z.string().optional(),
+          hospital: z.string().optional(),
         }).optional()
       )
       .query(async ({ input }) => {
         return getInvestmentSummary({
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
+          hospital: input?.hospital,
         });
       }),
 
@@ -591,12 +593,14 @@ export const appRouter = router({
         z.object({
           dateFrom: z.string().optional(),
           dateTo: z.string().optional(),
+          hospital: z.string().optional(),
         }).optional()
       )
       .query(async ({ input }) => {
         return getPipelineSummary({
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
+          hospital: input?.hospital,
         });
       }),
 

@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useMemo, useCallback } from
 
 export type DateRangePreset = "today" | "7d" | "30d" | "thisMonth" | "lastMonth" | "custom";
 
+/** null = todos os hospitais */
+export type HospitalFilter = null | "HOPE" | "CBV" | "HOLHOS";
+
 export interface DateRangeValue {
   from: Date;
   to: Date;
@@ -17,6 +20,9 @@ interface DateRangeContextType extends DateRangeValue {
   toISO: string;
   /** Numero de dias no range (inclusive) */
   days: number;
+  /** Hospital atualmente filtrado (null = todos) */
+  hospital: HospitalFilter;
+  setHospital: (h: HospitalFilter) => void;
 }
 
 const DateRangeContext = createContext<DateRangeContextType | undefined>(undefined);
@@ -82,6 +88,7 @@ export function DateRangeProvider({ children, defaultPreset = "30d" }: DateRange
     to: initial.to,
     preset: defaultPreset,
   });
+  const [hospital, setHospital] = useState<HospitalFilter>(null);
 
   const setRange = useCallback((value: Partial<DateRangeValue>) => {
     setState((prev) => ({ ...prev, ...value }));
@@ -108,6 +115,8 @@ export function DateRangeProvider({ children, defaultPreset = "30d" }: DateRange
         fromISO,
         toISO: toISOStr,
         days,
+        hospital,
+        setHospital,
       }}
     >
       {children}
