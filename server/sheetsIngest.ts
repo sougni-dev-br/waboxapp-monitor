@@ -119,7 +119,7 @@ function normalizeHeader(h: string): string {
  * planilha sem precisar de novo deploy).
  */
 const DEFAULT_CUSTOS_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnz333oGQxwrQiIhPBTe2DuPjEcWDPIrXRMXxhEFIlvrZYK1l5-bL15BvX4dsn-S1c-UM99OORQYZk/pub?gid=613552359&single=true&output=csv";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSnz333oGQxwrQiIhPBTe2DuPjEcWDPIrXRMXxhEFIlvrZYK1l5-bL15BvX4dsn-S1c-UM99OORQYZk/pub?gid=781016203&single=true&output=csv";
 
 /**
  * Procura a linha do header de uma tabela ignorando linhas decorativas
