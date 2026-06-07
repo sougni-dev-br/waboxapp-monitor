@@ -240,27 +240,11 @@ function InvestmentSection({
     );
   }
 
-  if (data.source === "unavailable") {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-2">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-amber-700" />
-          <p className="text-sm font-semibold text-amber-900">Aba CUSTOS ainda não conectada</p>
-        </div>
-        <p className="text-xs text-amber-800/80 leading-relaxed">
-          Publique a aba <b>CUSTOS</b> da planilha como CSV (Arquivo → Compartilhar → Publicar na
-          web → CUSTOS + Valores separados por vírgula) e cole a URL no Render como{" "}
-          <code className="bg-amber-100 px-1 rounded">SHEETS_CUSTOS_CSV_URL</code>.
-        </p>
-      </div>
-    );
-  }
-
-  if (data.total === 0) {
+  if (data.source === "unavailable" || data.total === 0) {
     return (
       <EmptyState
-        title="Sem custos no período selecionado"
-        description="A aba CUSTOS está conectada, mas não há lançamentos dentro do range do filtro."
+        title="Sem investimento no período"
+        description="Lance custos diários (data, canal, campanha, hospital, valor) na aba CUSTOS da planilha. CPL, CAC e ROAS recalculam automaticamente."
         icon={Wallet}
       />
     );
