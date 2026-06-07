@@ -744,14 +744,6 @@ interface PipelinePayload {
     scheduledToConsultedDays: number | null;
     consultedToSurgeryDays: number | null;
   };
-  bySdr: Array<{
-    key: string;
-    leads: number;
-    scheduled: number;
-    surgeries: number;
-    revenue: number;
-    convPct: number;
-  }>;
   byHospital: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
   byChannel: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
   byProcedure: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
@@ -1062,40 +1054,42 @@ function PerformanceTable({
   );
 }
 
-// ─── SDR + Losses Section ────────────────────────────────────────────────────
+// ─── Losses + Procedure Section ──────────────────────────────────────────────
 
-function SdrAndLossesSection({ pipeline }: { pipeline: PipelinePayload | undefined }) {
+function LossesSection({ pipeline }: { pipeline: PipelinePayload | undefined }) {
   if (!pipeline || pipeline.source !== "sheet" || pipeline.funnel.leads === 0) return null;
+
+  const hasProcedures = pipeline.byProcedure.length > 0;
+  const hasLosses = pipeline.lossReasons.length > 0;
+
+  if (!hasProcedures && !hasLosses) return null;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* SDRs */}
-      {pipeline.bySdr.length > 0 && (
+      {/* Performance por procedimento */}
+      {hasProcedures && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">
-            Ranking de SDRs
+            Performance por procedimento
           </p>
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 text-[10px] uppercase tracking-wider text-gray-400 font-semibold pb-1 border-b border-gray-100">
-              <span className="col-span-4">SDR</span>
+              <span className="col-span-5">Procedimento</span>
               <span className="col-span-2 text-right">Leads</span>
-              <span className="col-span-2 text-right">Agend.</span>
               <span className="col-span-2 text-right">Cirurg.</span>
-              <span className="col-span-2 text-right">Conv</span>
+              <span className="col-span-3 text-right">Receita</span>
             </div>
-            {pipeline.bySdr.slice(0, 8).map((s, i) => (
-              <div key={s.key} className="grid grid-cols-12 gap-2 text-xs items-center py-1">
-                <span className="col-span-4 flex items-center gap-1.5 min-w-0">
-                  {i === 0 && <span className="text-amber-500 text-sm">★</span>}
-                  <span className="font-medium text-[#11131F] truncate" title={s.key}>
-                    {s.key}
-                  </span>
+            {pipeline.byProcedure.slice(0, 6).map((p) => (
+              <div key={p.key} className="grid grid-cols-12 gap-2 text-xs items-center py-1">
+                <span className="col-span-5 font-medium text-[#11131F] truncate" title={p.key}>
+                  {p.key}
                 </span>
-                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(s.leads)}</span>
-                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(s.scheduled)}</span>
-                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(s.surgeries)}</span>
-                <span className="col-span-2 text-right tabular font-semibold text-[#11131F]">
-                  {s.convPct.toFixed(0)}%
+                <span className="col-span-2 text-right tabular text-gray-600">{fmtNum(p.leads)}</span>
+                <span className="col-span-2 text-right tabular text-gray-600">
+                  {fmtNum(p.surgeries)}
+                </span>
+                <span className="col-span-3 text-right tabular font-semibold text-[#11131F]">
+                  {p.revenue > 0 ? fmtMoney(p.revenue) : "—"}
                 </span>
               </div>
             ))}
@@ -1104,7 +1098,7 @@ function SdrAndLossesSection({ pipeline }: { pipeline: PipelinePayload | undefin
       )}
 
       {/* Motivos de perda */}
-      {pipeline.lossReasons.length > 0 && (
+      {hasLosses && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">
             Motivos de perda
@@ -1261,10 +1255,10 @@ export function OperationalDashV2() {
 
         <Section
           index="04"
-          title="Performance & Perdas (PIPELINE)"
-          subtitle="Ranking de SDRs e principais motivos de perda"
+          title="Procedimentos & Perdas (PIPELINE)"
+          subtitle="Performance por procedimento e principais motivos de perda"
         >
-          <SdrAndLossesSection pipeline={pipeline} />
+          <LossesSection pipeline={pipeline} />
         </Section>
 
         <Section

@@ -266,7 +266,6 @@ export interface PipelineLead {
   procedure: string;
   channel: string;
   campaign: string;
-  sdr: string;
   /** YYYY-MM-DD da data agendada (opcional) */
   dateScheduled: string | null;
   /** YYYY-MM-DD da consulta realizada (opcional) */
@@ -322,7 +321,6 @@ export async function fetchPipelineLeads(): Promise<PipelineLead[] | null> {
     procedure: h.findIndex((c) => c === "procedimento"),
     channel: h.findIndex((c) => c === "canal"),
     campaign: h.findIndex((c) => c === "campanha"),
-    sdr: h.findIndex((c) => c === "sdr"),
     dateScheduled: h.findIndex((c) => c === "dataagendada"),
     dateConsultation: h.findIndex((c) => c === "dataconsulta"),
     dateSurgery: h.findIndex((c) => c === "datacirurgia"),
@@ -350,7 +348,6 @@ export async function fetchPipelineLeads(): Promise<PipelineLead[] | null> {
       procedure: (r[idx.procedure] ?? "").trim() || "—",
       channel: (r[idx.channel] ?? "").trim() || "—",
       campaign: (r[idx.campaign] ?? "").trim() || "—",
-      sdr: (r[idx.sdr] ?? "").trim() || "—",
       dateScheduled,
       dateConsultation,
       dateSurgery,
@@ -391,16 +388,6 @@ export interface PipelineSummary {
     scheduledToConsultedDays: number | null;
     consultedToSurgeryDays: number | null;
   };
-  /** Performance por SDR */
-  bySdr: Array<{
-    key: string;
-    leads: number;
-    scheduled: number;
-    surgeries: number;
-    revenue: number;
-    /** Conversão lead→cirurgia em % */
-    convPct: number;
-  }>;
   /** Distribuição por hospital */
   byHospital: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
   byChannel: Array<{ key: string; leads: number; surgeries: number; revenue: number }>;
@@ -432,21 +419,6 @@ function safePct(num: number, den: number): number {
   return (num / den) * 100;
 }
 
-function aggSdr(leads: PipelineLead[]) {
-  const map = new Map<string, { leads: number; scheduled: number; surgeries: number; revenue: number }>();
-  for (const l of leads) {
-    const k = l.sdr || "—";
-    const e = map.get(k) ?? { leads: 0, scheduled: 0, surgeries: 0, revenue: 0 };
-    e.leads += 1;
-    if (l.dateScheduled) e.scheduled += 1;
-    if (l.dateSurgery) { e.surgeries += 1; e.revenue += l.surgeryValue; }
-    map.set(k, e);
-  }
-  return Array.from(map.entries())
-    .map(([key, v]) => ({ key, ...v, convPct: safePct(v.surgeries, v.leads) }))
-    .sort((a, b) => b.surgeries - a.surgeries || b.leads - a.leads);
-}
-
 function aggGroup(leads: PipelineLead[], pick: (l: PipelineLead) => string) {
   const map = new Map<string, { leads: number; surgeries: number; revenue: number }>();
   for (const l of leads) {
@@ -470,7 +442,6 @@ export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: str
     revenue: 0,
     averageTicket: 0,
     funnelTime: { leadToScheduledDays: null, scheduledToConsultedDays: null, consultedToSurgeryDays: null },
-    bySdr: [],
     byHospital: [],
     byChannel: [],
     byProcedure: [],
@@ -530,7 +501,6 @@ export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: str
       scheduledToConsultedDays: avgDays((l) => l.dateScheduled, (l) => l.dateConsultation, scoped),
       consultedToSurgeryDays: avgDays((l) => l.dateConsultation, (l) => l.dateSurgery, scoped),
     },
-    bySdr: aggSdr(scoped),
     byHospital: aggGroup(scoped, (l) => l.hospital),
     byChannel: aggGroup(scoped, (l) => l.channel),
     byProcedure: aggGroup(scoped, (l) => l.procedure),
