@@ -1,229 +1,83 @@
 /**
- * Dashboard Executivo Sougni — V2
+ * Dashboard Operacional Sougni — V3 (zero mock).
  *
- * 9 sessões organizadas em blocos visuais distintos:
- * 0. Hero · Indicadores Prioritários
- * 1. Funil da Operação
- * 2. Indicadores de Mídia
- * 3. Qualidade do Lead
- * 4. Indicadores SDR
- * 5. Conversão do Funil
- * 6. Indicadores Financeiros
- * 7. Análise por Canal
- * 8. Estrutura Técnica
+ * Fontes de dados:
+ *   1. Aba CUSTOS da planilha publicada (trpc.dashboard.investment)
+ *   2. Banco de dados do monitor (trpc.dashboard.overview)
  *
- * Dados mockados — depois plugados ao backend.
+ * Tudo respeita o seletor de período global (DateRangeContext).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { motion, useInView } from "framer-motion";
+import { useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useDateRange } from "@/contexts/DateRangeContext";
-import { format as fmtDate } from "date-fns";
+import { format as fmtDate, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar as CalendarIcon } from "lucide-react";
 import {
-  Activity,
-  ArrowUpRight,
-  ArrowDownRight,
-  TrendingUp,
+  Calendar as CalendarIcon,
   Wallet,
-  MousePointerClick,
-  DollarSign,
-  Target,
   Users,
-  UserCheck,
-  UserX,
-  CalendarCheck,
-  CalendarDays,
-  Stethoscope,
-  Megaphone,
-  MapPin,
-  Image as ImageIcon,
-  Zap,
-  Timer,
-  Award,
-  TrendingDown,
-  Database,
   MessageCircle,
-  BarChart3,
+  Timer,
+  Activity,
+  TrendingUp,
+  Tag,
+  Smartphone,
+  AlertCircle,
   Sparkles,
+  Clock,
   CheckCircle2,
-  ArrowRight,
+  Target,
 } from "lucide-react";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip as RTooltip,
   ResponsiveContainer,
-  Cell,
   PieChart,
   Pie,
-  RadialBarChart,
-  RadialBar,
-  PolarAngleAxis,
+  Cell,
 } from "recharts";
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK = {
-  priority: {
-    timeToContact: { value: 3.2, unit: "min", delta: -18 },
-    schedulingRate: { value: 48.1, unit: "%", delta: 12 },
-    surgeryConversion: { value: 7.1, unit: "%", delta: 5 },
-    cacPerSurgery: { value: 982, unit: "R$", delta: -8 },
-  },
-  funnel: [
-    { stage: "Lead gerado", count: 1247, color: "#DFFF00" },
-    { stage: "Lead contatado", count: 856, color: "#A8E5FF" },
-    { stage: "Consulta agendada", count: 412, color: "#FFB876" },
-    { stage: "Consulta realizada", count: 287, color: "#FF9C9C" },
-    { stage: "Cirurgia realizada", count: 89, color: "#11131F" },
-  ],
-  media: {
-    totalInvestment: 87450,
-    ctr: 8.4,
-    cpc: 5.92,
-    cpl: 70.13,
-    perCampaign: [
-      { name: "Catarata Premium SP", leads: 387 },
-      { name: "Refrativa LASIK SP", leads: 298 },
-      { name: "Plástica Ocular RJ", leads: 156 },
-      { name: "Catarata BH", leads: 134 },
-      { name: "Refrativa Curitiba", leads: 89 },
-      { name: "Cirurgia Refrativa Floripa", leads: 67 },
-    ],
-    perCity: [
-      { city: "São Paulo", leads: 412, pct: 33 },
-      { city: "Rio de Janeiro", leads: 287, pct: 23 },
-      { city: "Belo Horizonte", leads: 198, pct: 16 },
-      { city: "Brasília", leads: 134, pct: 11 },
-      { city: "Curitiba", leads: 98, pct: 8 },
-      { city: "Outras capitais", leads: 118, pct: 9 },
-    ],
-    perCreative: [
-      { name: "VSL Catarata 60s", leads: 234, thumb: "🎬" },
-      { name: "Carrossel Refrativa", leads: 187, thumb: "🖼️" },
-      { name: "Reel Depoimento Cirurgião", leads: 156, thumb: "🎥" },
-      { name: "Vídeo Antes/Depois", leads: 142, thumb: "📸" },
-      { name: "Imagem Estática Refrativa", leads: 89, thumb: "🖼️" },
-      { name: "Reel Bastidores Clínica", leads: 67, thumb: "🎥" },
-    ],
-  },
-  quality: {
-    valid: 847,
-    invalid: 400,
-    timeToContact: 3.2,
-    respondedWithin5Min: 87,
-  },
-  sdr: {
-    contactRate: 68.6,
-    schedulingRate: 48.1,
-    abandonedLeads: 142,
-    perSDR: [
-      { name: "Ana Lima",       contactRate: 78, conversion: 38, leads: 234, surgeries: 17 },
-      { name: "Carla Souza",    contactRate: 72, conversion: 32, leads: 198, surgeries: 12 },
-      { name: "Bruno Mendes",   contactRate: 65, conversion: 28, leads: 187, surgeries: 9 },
-      { name: "Felipe Santos",  contactRate: 61, conversion: 24, leads: 156, surgeries: 7 },
-      { name: "Mariana Costa",  contactRate: 58, conversion: 22, leads: 134, surgeries: 6 },
-    ],
-  },
-  conversions: [
-    { from: "Lead", to: "Contato", rate: 68.6, color: "#DFFF00" },
-    { from: "Contato", to: "Consulta", rate: 48.1, color: "#A8E5FF" },
-    { from: "Consulta", to: "Cirurgia", rate: 31.0, color: "#FFB876" },
-  ],
-  financial: {
-    cacPerSurgery: 982,
-    cacPerConsult: 305,
-    roi: 312,
-    roas: 4.12,
-    revenue: 358700,
-    deltaRevenue: 18,
-  },
-  channels: {
-    performance: [
-      { channel: "Google Ads · Catarata", leads: 587, invest: 38000, cac: 968 },
-      { channel: "Meta Ads · Refrativa",  leads: 412, invest: 31000, cac: 1240 },
-      { channel: "Google Ads · Refrativa", leads: 156, invest: 12000, cac: 1850 },
-      { channel: "Meta Ads · Catarata",   leads: 92,  invest: 6450,  cac: 2103 },
-    ],
-    cacPerCampaign: [
-      { campaign: "Catarata Premium SP", cac: 98 },
-      { campaign: "Refrativa LASIK SP", cac: 145 },
-      { campaign: "Cirurgia Refrativa BH", cac: 167 },
-      { campaign: "Plástica Ocular RJ", cac: 210 },
-    ],
-    revenuePerChannel: [
-      { channel: "Google Ads", revenue: 218000 },
-      { channel: "Meta Ads", revenue: 140700 },
-    ],
-  },
-  tech: [
-    { name: "Dashboard em tempo real", detail: "Atualizando a cada 60s",   icon: BarChart3 },
-    { name: "Integração CRM",          detail: "Sincronizado há 2 min",    icon: Database },
-    { name: "Integração WhatsApp",     detail: "3 instâncias conectadas",  icon: MessageCircle },
-    { name: "Integração Mídia",        detail: "Google + Meta Ads",        icon: Megaphone },
-  ],
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const fmtBRL = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
-
-const fmtBRL2 = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
-
-const fmtBRLCompact = (v: number) => {
-  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1).replace(".", ",")}M`;
-  if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(1).replace(".", ",")}k`;
-  return fmtBRL(v);
-};
+const fmtMoney = (v: number, frac = 0) =>
+  v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: frac,
+    maximumFractionDigits: frac,
+  });
 
 const fmtNum = (v: number) => new Intl.NumberFormat("pt-BR").format(v);
 
-// CountUp simples sem dep externa
-function useCountUp(target: number, duration = 1400, decimals = 0): number {
-  const [val, setVal] = useState(0);
-  const startedRef = useRef(false);
+const fmtDayShort = (iso: string) => {
+  try {
+    return fmtDate(parseISO(iso), "dd/MM", { locale: ptBR });
+  } catch {
+    return iso;
+  }
+};
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setVal(target * eased);
-      if (t < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, [target, duration]);
-
-  return parseFloat(val.toFixed(decimals));
-}
-
-function AnimatedNumber({
-  value, prefix = "", suffix = "", decimals = 0, className = "",
-}: { value: number; prefix?: string; suffix?: string; decimals?: number; className?: string }) {
-  const animated = useCountUp(value, 1400, decimals);
-  return (
-    <span className={className}>
-      {prefix}
-      {decimals > 0 ? animated.toFixed(decimals).replace(".", ",") : fmtNum(Math.round(animated))}
-      {suffix}
-    </span>
-  );
-}
-
-// ─── Section Wrapper ──────────────────────────────────────────────────────────
+// ─── Section wrapper com fade-in ─────────────────────────────────────────────
 
 function Section({
-  index, title, subtitle, children,
-}: { index: string; title: string; subtitle?: string; children: React.ReactNode }) {
+  index,
+  title,
+  subtitle,
+  children,
+}: {
+  index: string;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
   return (
@@ -247,921 +101,57 @@ function Section({
   );
 }
 
-// ─── Delta Indicator ──────────────────────────────────────────────────────────
+// ─── KPI Card ────────────────────────────────────────────────────────────────
 
-function Delta({ value, invertColor = false }: { value: number; invertColor?: boolean }) {
-  const isPositive = value >= 0;
-  const isGood = invertColor ? !isPositive : isPositive;
-  const color = isGood ? "text-emerald-600 bg-emerald-50" : "text-red-500 bg-red-50";
-  const Icon = isPositive ? ArrowUpRight : ArrowDownRight;
-  return (
-    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${color}`}>
-      <Icon className="h-2.5 w-2.5" />
-      {Math.abs(value)}%
-    </span>
-  );
-}
-
-// ─── 0. Hero · Indicadores Prioritários ───────────────────────────────────────
-
-function HeroPriority() {
-  const cards = [
-    {
-      label: "Tempo até 1º contato",
-      value: MOCK.priority.timeToContact.value,
-      unit: " min",
-      decimals: 1,
-      delta: MOCK.priority.timeToContact.delta,
-      icon: Timer,
-      hint: "Mais rápido é melhor",
-      invertDelta: true,
-      accent: "bg-amber-50",
-      accentIcon: "text-amber-700",
-    },
-    {
-      label: "Taxa de agendamento",
-      value: MOCK.priority.schedulingRate.value,
-      unit: "%",
-      decimals: 1,
-      delta: MOCK.priority.schedulingRate.delta,
-      icon: CalendarCheck,
-      hint: "Contato → Consulta",
-      accent: "bg-emerald-50",
-      accentIcon: "text-emerald-700",
-    },
-    {
-      label: "Conversão cirurgia",
-      value: MOCK.priority.surgeryConversion.value,
-      unit: "%",
-      decimals: 1,
-      delta: MOCK.priority.surgeryConversion.delta,
-      icon: Stethoscope,
-      hint: "Lead → Cirurgia realizada",
-      accent: "bg-rose-50",
-      accentIcon: "text-rose-700",
-    },
-    {
-      label: "CAC por cirurgia",
-      value: MOCK.priority.cacPerSurgery.value,
-      prefix: "R$ ",
-      delta: MOCK.priority.cacPerSurgery.delta,
-      icon: Wallet,
-      hint: "Custo de aquisição",
-      invertDelta: true,
-      accent: "bg-violet-50",
-      accentIcon: "text-violet-700",
-    },
-  ];
-
-  return (
-    <div className="relative">
-      {/* Glow lime sutil de fundo */}
-      <div className="absolute inset-0 -z-10 overflow-hidden rounded-3xl">
-        <div className="absolute top-0 left-1/4 w-[400px] h-[200px] rounded-full opacity-30 blur-3xl"
-             style={{ background: "radial-gradient(circle, #DFFF00 0%, transparent 70%)" }} />
-      </div>
-
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: "#11131F" }}>
-              <Sparkles className="h-4 w-4 text-[#DFFF00]" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white animate-pulse" />
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-semibold">Painel Executivo</p>
-            <h1 className="text-xl font-semibold text-gray-900 leading-tight">Indicadores Prioritários</h1>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">Atualizado agora</p>
-          <p className="text-xs text-gray-700 font-medium">Período · Últimos 30 dias</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        {cards.map((c, i) => (
-          <motion.div
-            key={c.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 * i, duration: 0.5 }}
-            whileHover={{ y: -3 }}
-            className="group relative bg-white border border-gray-100 rounded-2xl p-5 hover:border-gray-200 hover:shadow-md transition-all overflow-hidden"
-          >
-            {/* Faixa de destaque no topo */}
-            <div className="absolute top-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                 style={{ background: "linear-gradient(90deg, #DFFF00, transparent)" }} />
-
-            <div className="flex items-start justify-between mb-3">
-              <div className={`w-9 h-9 rounded-xl ${c.accent} flex items-center justify-center`}>
-                <c.icon className={`h-4 w-4 ${c.accentIcon}`} />
-              </div>
-              {c.delta !== undefined && <Delta value={c.delta} invertColor={c.invertDelta} />}
-            </div>
-
-            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1">{c.label}</p>
-
-            <div className="flex items-baseline gap-0.5">
-              <AnimatedNumber
-                value={c.value}
-                decimals={c.decimals ?? 0}
-                prefix={c.prefix ?? ""}
-                className="text-3xl font-bold text-gray-900 tabular-nums tracking-tight"
-              />
-              {c.unit && <span className="text-base text-gray-400 font-medium">{c.unit}</span>}
-            </div>
-
-            <p className="text-[11px] text-gray-400 mt-2">{c.hint}</p>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── 1. Funil da Operação ─────────────────────────────────────────────────────
-
-function FunilOperacao() {
-  const top = MOCK.funnel[0].count;
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-      {/* Visualização do funil */}
-      <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 p-6">
-        <div className="space-y-2">
-          {MOCK.funnel.map((stage, i) => {
-            const width = (stage.count / top) * 100;
-            const previous = i > 0 ? MOCK.funnel[i - 1].count : null;
-            const dropoff = previous ? (((previous - stage.count) / previous) * 100).toFixed(1) : null;
-            return (
-              <motion.div
-                key={stage.stage}
-                initial={{ opacity: 0, scaleX: 0 }}
-                animate={{ opacity: 1, scaleX: 1 }}
-                transition={{ delay: 0.1 + 0.1 * i, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                style={{ transformOrigin: "left" }}
-                className="relative"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-32 shrink-0 text-right">
-                    <p className="text-xs text-gray-500">{stage.stage}</p>
-                  </div>
-                  <div className="flex-1 relative" style={{ height: 56 }}>
-                    <div
-                      className="absolute left-0 top-0 bottom-0 rounded-r-lg flex items-center px-4 shadow-sm"
-                      style={{
-                        width: `${width}%`,
-                        background: i === MOCK.funnel.length - 1
-                          ? "linear-gradient(90deg, #11131F 0%, #1f2238 100%)"
-                          : `linear-gradient(90deg, ${stage.color}EE 0%, ${stage.color}99 100%)`,
-                      }}
-                    >
-                      <span className={`font-mono font-bold text-base tabular-nums ${i === MOCK.funnel.length - 1 ? "text-[#DFFF00]" : "text-gray-900"}`}>
-                        {fmtNum(stage.count)}
-                      </span>
-                      <span className={`ml-2 text-[11px] font-medium ${i === MOCK.funnel.length - 1 ? "text-white/70" : "text-gray-700/70"}`}>
-                        {((stage.count / top) * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                {dropoff && (
-                  <div className="ml-32 pl-3 mt-0.5 mb-0.5">
-                    <span className="text-[10px] text-red-400 font-medium">↓ {dropoff}% drop-off</span>
-                  </div>
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Resumo lateral */}
-      <div className="lg:col-span-2 space-y-3">
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Conversão total</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1 tabular-nums">
-            <AnimatedNumber value={(MOCK.funnel[4].count / MOCK.funnel[0].count) * 100} decimals={1} suffix="%" />
-          </p>
-          <p className="text-xs text-gray-500 mt-1">de {fmtNum(MOCK.funnel[0].count)} leads a {fmtNum(MOCK.funnel[4].count)} cirurgias</p>
-        </div>
-        <div className="bg-gradient-to-br from-[#11131F] to-[#1f2238] rounded-2xl p-5 text-white relative overflow-hidden">
-          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full opacity-20 blur-2xl bg-[#DFFF00]" />
-          <div className="relative">
-            <p className="text-[11px] uppercase tracking-wider text-white/50 font-medium">Receita potencial</p>
-            <p className="text-3xl font-bold mt-1 tabular-nums">
-              <AnimatedNumber value={358700} prefix="R$ " />
-            </p>
-            <p className="text-xs text-white/60 mt-1">com 89 cirurgias realizadas</p>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Maior gargalo</p>
-          <p className="text-lg font-semibold text-gray-900 mt-1">Lead → Contato</p>
-          <p className="text-xs text-gray-500 mt-1">31,4% dos leads não foram contatados</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── 2. Indicadores de Mídia ──────────────────────────────────────────────────
-
-function IndicadoresMidia() {
-  return (
-    <div className="space-y-4">
-      {/* KPIs principais */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MetricBox icon={Wallet} iconBg="bg-emerald-50" iconColor="text-emerald-600"
-          label="Investimento total" value={fmtBRLCompact(MOCK.media.totalInvestment)} delta={12} hint="vs período anterior" />
-        <MetricBox icon={MousePointerClick} iconBg="bg-blue-50" iconColor="text-blue-600"
-          label="CTR médio" value={`${MOCK.media.ctr.toString().replace(".", ",")}%`} delta={3} hint="Acima da média do setor" />
-        <MetricBox icon={DollarSign} iconBg="bg-violet-50" iconColor="text-violet-600"
-          label="CPC médio" value={fmtBRL2(MOCK.media.cpc)} delta={-5} invertDelta hint="Quanto menor, melhor" />
-        <MetricBox icon={Target} iconBg="bg-rose-50" iconColor="text-rose-600"
-          label="CPL médio" value={fmtBRL2(MOCK.media.cpl)} delta={-8} invertDelta hint="Custo por lead" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Leads por campanha */}
-        <ChartCard title="Leads por campanha" icon={Megaphone} subtitle="Top 6 do período">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={MOCK.media.perCampaign} layout="vertical" margin={{ left: 4, right: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
-              <XAxis type="number" stroke="#D1D5DB" tick={{ fill: "#9CA3AF", fontSize: 10 }} tickLine={false} axisLine={false} />
-              <YAxis type="category" dataKey="name" stroke="#D1D5DB" tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} width={130} />
-              <RTooltip cursor={{ fill: "#F9FAFB" }} formatter={(v: number) => [fmtNum(v) + " leads", ""]}
-                contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }} />
-              <Bar dataKey="leads" radius={[0, 6, 6, 0]} maxBarSize={20}>
-                {MOCK.media.perCampaign.map((_, i) => (
-                  <Cell key={i} fill={i === 0 ? "#DFFF00" : "#11131F"} fillOpacity={i === 0 ? 1 : 0.85 - i * 0.1} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Leads por cidade */}
-        <ChartCard title="Leads por cidade" icon={MapPin} subtitle="Distribuição geográfica">
-          <div className="space-y-2.5">
-            {MOCK.media.perCity.map((c, i) => (
-              <motion.div
-                key={c.city}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 * i, duration: 0.4 }}
-                className="group"
-              >
-                <div className="flex items-baseline justify-between mb-1">
-                  <span className="text-xs text-gray-700 font-medium">{c.city}</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs text-gray-400">{c.pct}%</span>
-                    <span className="text-xs text-gray-900 font-semibold tabular-nums">{fmtNum(c.leads)}</span>
-                  </div>
-                </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${c.pct * 3}%` }}
-                    transition={{ delay: 0.1 + 0.05 * i, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                    className="h-full rounded-full"
-                    style={{
-                      background: i === 0
-                        ? "linear-gradient(90deg, #DFFF00, #b3cc00)"
-                        : "linear-gradient(90deg, #11131F, #4a4d65)",
-                      maxWidth: "100%",
-                    }}
-                  />
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </ChartCard>
-
-        {/* Leads por criativo */}
-        <ChartCard title="Leads por criativo" icon={ImageIcon} subtitle="Performance criativa">
-          <div className="space-y-2">
-            {MOCK.media.perCreative.map((c, i) => (
-              <motion.div
-                key={c.name}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 * i, duration: 0.4 }}
-                className="flex items-center gap-3 group hover:bg-gray-50 rounded-lg px-2 -mx-2 py-1.5 transition-colors"
-              >
-                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center text-base group-hover:bg-[#DFFF00] transition-colors">
-                  {c.thumb}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-gray-900 truncate">{c.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gray-900 rounded-full"
-                           style={{ width: `${(c.leads / MOCK.media.perCreative[0].leads) * 100}%` }} />
-                    </div>
-                    <span className="text-[10px] text-gray-500 font-medium tabular-nums">{c.leads}</span>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </ChartCard>
-      </div>
-    </div>
-  );
-}
-
-// ─── 3. Qualidade do Lead ─────────────────────────────────────────────────────
-
-function QualidadeLead() {
-  const total = MOCK.quality.valid + MOCK.quality.invalid;
-  const validPct = Math.round((MOCK.quality.valid / total) * 100);
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* Donut Válidos/Inválidos */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <UserCheck className="h-4 w-4 text-gray-400" />
-          <p className="text-sm font-semibold text-gray-700">Distribuição de qualidade</p>
-        </div>
-        <div className="grid grid-cols-2 gap-4 items-center">
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={[
-                  { name: "Válidos", value: MOCK.quality.valid, color: "#DFFF00" },
-                  { name: "Inválidos", value: MOCK.quality.invalid, color: "#FECACA" },
-                ]}
-                cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value" strokeWidth={0}
-              >
-                <Cell fill="#DFFF00" />
-                <Cell fill="#FECACA" />
-              </Pie>
-              <RTooltip contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6", fontSize: 12 }} />
-              <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                <tspan x="50%" dy="-6" fontSize="22" fontWeight="700" fill="#111827">{validPct}%</tspan>
-                <tspan x="50%" dy="18" fontSize="10" fill="#9CA3AF">válidos</tspan>
-              </text>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-3 h-3 rounded-sm bg-[#DFFF00]" />
-              <div>
-                <p className="text-xs text-gray-500">Válidos</p>
-                <p className="text-lg font-bold text-gray-900 tabular-nums">
-                  <AnimatedNumber value={MOCK.quality.valid} />
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-3 h-3 rounded-sm bg-red-200" />
-              <div>
-                <p className="text-xs text-gray-500">Inválidos</p>
-                <p className="text-lg font-bold text-gray-900 tabular-nums">
-                  <AnimatedNumber value={MOCK.quality.invalid} />
-                </p>
-              </div>
-            </div>
-            <div className="pt-2 border-t border-gray-100">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Total recebido</p>
-              <p className="text-sm font-semibold text-gray-700 tabular-nums">{fmtNum(total)} leads</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tempo e SLA */}
-      <div className="space-y-3">
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-amber-600" />
-              <p className="text-sm font-semibold text-gray-700">Tempo até primeiro contato</p>
-            </div>
-            <Delta value={-18} invertColor />
-          </div>
-          <div className="flex items-baseline gap-1">
-            <AnimatedNumber value={MOCK.quality.timeToContact} decimals={1} className="text-4xl font-bold text-gray-900 tabular-nums" />
-            <span className="text-lg text-gray-400">min</span>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">Média de resposta da operação no período</p>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 relative overflow-hidden">
-          <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-[#DFFF00] opacity-10" />
-          <div className="relative">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-blue-600" />
-                <p className="text-sm font-semibold text-gray-700">% Atendidos em ≤5 minutos</p>
-              </div>
-              <Delta value={12} />
-            </div>
-            <ResponsiveContainer width="100%" height={90}>
-              <RadialBarChart innerRadius="65%" outerRadius="100%" data={[{ value: MOCK.quality.respondedWithin5Min }]} startAngle={180} endAngle={0}>
-                <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-                <RadialBar background={{ fill: "#F3F4F6" }} dataKey="value" cornerRadius={20} fill="#DFFF00" />
-                <text x="50%" y="80%" textAnchor="middle" dominantBaseline="middle">
-                  <tspan fontSize="32" fontWeight="700" fill="#111827">{MOCK.quality.respondedWithin5Min}%</tspan>
-                </text>
-              </RadialBarChart>
-            </ResponsiveContainer>
-            <p className="text-xs text-gray-500 mt-1 text-center">Meta operacional: 90% · Estamos a 3pp do alvo</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── 4. Indicadores SDR ───────────────────────────────────────────────────────
-
-function IndicadoresSDR() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* KPIs do time */}
-      <div className="space-y-3">
-        <MetricBox icon={UserCheck} iconBg="bg-emerald-50" iconColor="text-emerald-600"
-          label="Taxa de contato" value={`${MOCK.sdr.contactRate.toString().replace(".", ",")}%`}
-          delta={4} hint="Leads atendidos no período" />
-        <MetricBox icon={CalendarCheck} iconBg="bg-blue-50" iconColor="text-blue-600"
-          label="Taxa de agendamento" value={`${MOCK.sdr.schedulingRate.toString().replace(".", ",")}%`}
-          delta={12} hint="Contatos que viraram consulta" />
-        <MetricBox icon={UserX} iconBg="bg-red-50" iconColor="text-red-500"
-          label="Leads abandonados" value={fmtNum(MOCK.sdr.abandonedLeads)}
-          delta={-22} invertDelta hint="Não retornaram ao SDR" />
-      </div>
-
-      {/* Ranking SDR */}
-      <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Award className="h-4 w-4 text-amber-500" />
-            <p className="text-sm font-semibold text-gray-700">Ranking · Conversão por SDR</p>
-          </div>
-          <span className="text-[10px] uppercase tracking-wider text-gray-400">Últimos 30 dias</span>
-        </div>
-        <div className="space-y-3">
-          {MOCK.sdr.perSDR.map((s, i) => (
-            <motion.div
-              key={s.name}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.05 * i, duration: 0.4 }}
-              className="flex items-center gap-3 group"
-            >
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-[#DFFF00] text-gray-900" : "bg-gray-100 text-gray-500"}`}>
-                {i + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                  <p className="text-sm font-bold text-gray-900 tabular-nums">{s.conversion}%</p>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(s.conversion / 40) * 100}%` }}
-                      transition={{ delay: 0.1 + 0.05 * i, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                      className="h-full rounded-full"
-                      style={{
-                        background: i === 0
-                          ? "linear-gradient(90deg, #DFFF00, #b3cc00)"
-                          : "linear-gradient(90deg, #11131F, #4a4d65)",
-                      }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-gray-400 tabular-nums w-14 text-right">{s.surgeries} cirurgias</span>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── 5. Conversão do Funil ────────────────────────────────────────────────────
-
-function ConversaoFunil() {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-6">
-      <div className="flex flex-col md:flex-row items-center gap-4 md:gap-0">
-        {MOCK.conversions.map((conv, i) => (
-          <div key={i} className="flex items-center gap-4 flex-1">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 * i, duration: 0.5 }}
-              className="flex-1 text-center relative group"
-            >
-              <div className="relative inline-block">
-                <ResponsiveContainer width={140} height={140}>
-                  <RadialBarChart innerRadius="70%" outerRadius="100%" data={[{ value: conv.rate, fill: conv.color }]} startAngle={90} endAngle={-270}>
-                    <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-                    <RadialBar background={{ fill: "#F3F4F6" }} dataKey="value" cornerRadius={20} />
-                  </RadialBarChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">
-                      <AnimatedNumber value={conv.rate} decimals={1} suffix="%" />
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <p className="text-sm font-semibold text-gray-900 mt-2">{conv.from} → {conv.to}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {i === 0 ? "Atendimento" : i === 1 ? "Qualificação" : "Conversão final"}
-              </p>
-            </motion.div>
-            {i < MOCK.conversions.length - 1 && (
-              <ArrowRight className="h-5 w-5 text-gray-300 hidden md:block shrink-0" />
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── 6. Indicadores Financeiros ───────────────────────────────────────────────
-
-function IndicadoresFinanceiros() {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-      <MetricBox icon={Wallet} iconBg="bg-violet-50" iconColor="text-violet-600"
-        label="CAC por cirurgia" value={fmtBRL(MOCK.financial.cacPerSurgery)} delta={-8} invertDelta />
-      <MetricBox icon={Wallet} iconBg="bg-blue-50" iconColor="text-blue-600"
-        label="CAC por consulta" value={fmtBRL(MOCK.financial.cacPerConsult)} delta={-12} invertDelta />
-      <MetricBox icon={TrendingUp} iconBg="bg-emerald-50" iconColor="text-emerald-600"
-        label="ROI" value={`${MOCK.financial.roi}%`} delta={28} />
-      <MetricBox icon={Target} iconBg="bg-amber-50" iconColor="text-amber-600"
-        label="ROAS" value={`${MOCK.financial.roas.toFixed(2).replace(".", ",")}x`} delta={15} />
-
-      {/* Card destacado de receita */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.5 }}
-        className="col-span-2 md:col-span-3 lg:col-span-1 bg-gradient-to-br from-[#DFFF00] to-[#b3cc00] rounded-2xl p-5 relative overflow-hidden"
-      >
-        <div className="absolute -bottom-4 -right-4 w-24 h-24 rounded-full bg-white/20 blur-xl" />
-        <div className="relative">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-9 h-9 rounded-xl bg-gray-900/10 flex items-center justify-center">
-              <DollarSign className="h-4 w-4 text-gray-900" />
-            </div>
-            <Delta value={MOCK.financial.deltaRevenue} />
-          </div>
-          <p className="text-[11px] uppercase tracking-wider text-gray-900/60 font-medium">Receita gerada</p>
-          <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">
-            <AnimatedNumber value={MOCK.financial.revenue} prefix="R$ " />
-          </p>
-          <p className="text-[11px] text-gray-900/70 mt-2">No período · 89 cirurgias</p>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-// ─── 7. Análise por Canal ─────────────────────────────────────────────────────
-
-function AnaliseCanal() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* Performance por canal */}
-      <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Activity className="h-4 w-4 text-gray-400" />
-          <p className="text-sm font-semibold text-gray-700">Performance · canal + procedimento</p>
-        </div>
-        <div className="space-y-3">
-          {MOCK.channels.performance.map((p, i) => (
-            <motion.div
-              key={p.channel}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.05 * i, duration: 0.4 }}
-              className="grid grid-cols-12 gap-3 items-center py-2 border-b border-gray-50 last:border-0"
-            >
-              <div className="col-span-4">
-                <p className="text-sm font-medium text-gray-900 truncate">{p.channel}</p>
-                <p className="text-[10px] text-gray-400">{fmtBRLCompact(p.invest)} investido</p>
-              </div>
-              <div className="col-span-5">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(p.leads / 600) * 100}%` }}
-                      transition={{ delay: 0.1 + 0.05 * i, duration: 0.6 }}
-                      className="h-full rounded-full"
-                      style={{ background: i === 0 ? "linear-gradient(90deg, #DFFF00, #b3cc00)" : "#11131F" }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-gray-700 tabular-nums w-10 text-right">{p.leads}</span>
-                </div>
-              </div>
-              <div className="col-span-3 text-right">
-                <p className="text-xs text-gray-500">CAC</p>
-                <p className="text-sm font-bold text-gray-900 tabular-nums">{fmtBRL(p.cac)}</p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Receita por canal + CAC por campanha */}
-      <div className="space-y-4">
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Receita por canal</p>
-          <div className="space-y-3">
-            {MOCK.channels.revenuePerChannel.map((r, i) => {
-              const total = MOCK.channels.revenuePerChannel.reduce((s, x) => s + x.revenue, 0);
-              const pct = (r.revenue / total) * 100;
-              return (
-                <div key={r.channel}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-700 font-medium">{r.channel}</span>
-                    <span className="text-gray-900 font-bold tabular-nums">{fmtBRLCompact(r.revenue)}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pct}%` }}
-                      transition={{ delay: 0.1 + i * 0.1, duration: 0.7 }}
-                      className="h-full rounded-full"
-                      style={{ background: i === 0 ? "linear-gradient(90deg, #DFFF00, #b3cc00)" : "#11131F" }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <p className="text-sm font-semibold text-gray-700 mb-3">CAC por campanha (top 4)</p>
-          <div className="space-y-2">
-            {MOCK.channels.cacPerCampaign.map((c, i) => (
-              <div key={c.campaign} className="flex items-baseline justify-between">
-                <span className="text-xs text-gray-600 truncate flex-1">{c.campaign}</span>
-                <span className="text-xs font-bold text-gray-900 tabular-nums ml-2">{fmtBRL(c.cac)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── 8. Estrutura Técnica ─────────────────────────────────────────────────────
-
-function EstruturaTecnica() {
-  return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {MOCK.tech.map((t, i) => (
-        <motion.div
-          key={t.name}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 * i, duration: 0.4 }}
-          className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-gray-200 transition-all group"
-        >
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center group-hover:bg-[#DFFF00]/20 transition-colors">
-              <t.icon className="h-4 w-4 text-gray-700" />
-            </div>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 rounded-md">
-              <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
-              <span className="text-[10px] text-emerald-700 font-semibold">Ativo</span>
-            </div>
-          </div>
-          <p className="text-sm font-semibold text-gray-900">{t.name}</p>
-          <p className="text-[11px] text-gray-500 mt-1">{t.detail}</p>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Sub-components reutilizáveis ─────────────────────────────────────────────
-
-function MetricBox({
-  icon: Icon, iconBg, iconColor, label, value, delta, invertDelta, hint,
+function KPICard({
+  label,
+  value,
+  hint,
+  accent = "bg-[#DFFF00]/15",
+  icon: Icon,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
-  iconBg: string; iconColor: string;
-  label: string; value: string;
-  delta?: number; invertDelta?: boolean; hint?: string;
+  label: string;
+  value: string;
+  hint?: string;
+  accent?: string;
+  icon?: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.3 }}
-      className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-gray-200 hover:shadow-sm transition-all"
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
-          <Icon className={`h-4 w-4 ${iconColor}`} />
-        </div>
-        {delta !== undefined && <Delta value={delta} invertColor={invertDelta} />}
-      </div>
-      <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 tabular-nums mt-0.5">{value}</p>
-      {hint && <p className="text-[11px] text-gray-400 mt-1.5">{hint}</p>}
-    </motion.div>
-  );
-}
-
-function ChartCard({
-  title, subtitle, icon: Icon, children,
-}: { title: string; subtitle?: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 h-full">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-gray-400" />
-          <p className="text-sm font-semibold text-gray-700">{title}</p>
-        </div>
-        {subtitle && <p className="text-[10px] uppercase tracking-wider text-gray-400">{subtitle}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// ─── Investment Section (planilha real) ──────────────────────────────────────
-
-interface InvestmentPayload {
-  total: number;
-  lines: number;
-  source: "sheet" | "unavailable";
-  byChannel: { key: string; total: number; rows: number }[];
-  byCampaign: { key: string; total: number; rows: number }[];
-  byHospital: { key: string; total: number; rows: number }[];
-  daily: { date: string; cost: number }[];
-}
-
-function fmtMoney(value: number, frac = 0) {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: frac,
-    maximumFractionDigits: frac,
-  });
-}
-
-function InvestmentSection({ data, leads }: { data: InvestmentPayload | undefined; leads: number }) {
-  if (!data) {
-    return (
-      <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
-        <p className="text-sm text-gray-400">Carregando custos da planilha...</p>
-      </div>
-    );
-  }
-
-  if (data.source === "unavailable") {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold text-xs">!</span>
-          <p className="text-sm font-semibold text-amber-900">Aba CUSTOS ainda não conectada</p>
-        </div>
-        <p className="text-xs text-amber-800/80 leading-relaxed">
-          Pra ver o investimento real aqui, publique a aba <b>CUSTOS</b> da planilha como CSV
-          (Arquivo → Compartilhar → Publicar na web → CUSTOS + Valores separados por vírgula)
-          e cole a URL no Render como <code className="bg-amber-100 px-1 rounded">SHEETS_CUSTOS_CSV_URL</code>.
-        </p>
-      </div>
-    );
-  }
-
-  const cpl = leads > 0 ? data.total / leads : null;
-  const topChannel = data.byChannel[0];
-  const topCampaign = data.byCampaign[0];
-  const topHospital = data.byHospital[0];
-
-  return (
-    <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
-          label="Investimento total"
-          value={fmtMoney(data.total)}
-          hint={`${data.lines} lançamento${data.lines === 1 ? "" : "s"} no período`}
-          accent="bg-[#DFFF00]/15"
-        />
-        <KPICard
-          label="CPL (Custo por Lead)"
-          value={cpl != null ? fmtMoney(cpl, 2) : "—"}
-          hint={leads > 0 ? `${leads.toLocaleString("pt-BR")} leads no período` : "Sem leads ainda"}
-          accent="bg-emerald-50"
-        />
-        <KPICard
-          label="Canal #1"
-          value={topChannel?.key ?? "—"}
-          hint={topChannel ? fmtMoney(topChannel.total) : "Sem dados"}
-          accent="bg-blue-50"
-        />
-        <KPICard
-          label="Hospital #1"
-          value={topHospital?.key ?? "—"}
-          hint={topHospital ? fmtMoney(topHospital.total) : "Sem dados"}
-          accent="bg-rose-50"
-        />
-      </div>
-
-      {/* Distribuição por canal + por hospital */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <BreakdownCard title="Por canal" items={data.byChannel} total={data.total} accent="#11131F" />
-        <BreakdownCard title="Por hospital" items={data.byHospital} total={data.total} accent="#11131F" />
-      </div>
-
-      {/* Por campanha */}
-      <BreakdownCard
-        title="Top campanhas"
-        items={data.byCampaign.slice(0, 8)}
-        total={data.total}
-        accent="#11131F"
-        full
-      />
-
-      {/* Série diária */}
-      {data.daily.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Investimento diário</p>
-              <p className="text-sm text-gray-900 font-semibold">
-                {data.daily.length} {data.daily.length === 1 ? "dia" : "dias"} com lançamentos
-              </p>
-            </div>
-            <p className="text-xs text-gray-400">
-              Pico: {fmtMoney(Math.max(...data.daily.map((d) => d.cost)))}
-            </p>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data.daily}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} interval="preserveStartEnd" />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`} />
-              <RTooltip
-                formatter={(v: number) => [fmtMoney(v), "Custo"]}
-                labelFormatter={(l) => `Dia ${l}`}
-                contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
-              />
-              <Bar dataKey="cost" fill="#11131F" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Nota */}
-      <p className="text-[11px] text-gray-400 text-center">
-        Fonte: aba CUSTOS da planilha Sougni — atualiza a cada 5 minutos
-        {topCampaign && <> · Campanha #1: <b className="text-[#11131F]">{topCampaign.key}</b> ({fmtMoney(topCampaign.total)})</>}
-      </p>
-    </div>
-  );
-}
-
-function KPICard({ label, value, hint, accent }: { label: string; value: string; hint: string; accent: string }) {
-  return (
     <div className="relative bg-white rounded-2xl border border-gray-200 p-5 overflow-hidden">
-      <div className={`absolute top-0 right-0 w-24 h-24 rounded-full ${accent} blur-2xl opacity-50 -translate-y-6 translate-x-6`} />
+      <div
+        className={`absolute top-0 right-0 w-24 h-24 rounded-full ${accent} blur-2xl opacity-50 -translate-y-6 translate-x-6`}
+      />
       <div className="relative">
-        <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{label}</p>
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className="w-3.5 h-3.5 text-gray-400" />}
+          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{label}</p>
+        </div>
         <p className="mt-2 text-2xl font-bold tracking-tight text-[#11131F] tabular truncate">{value}</p>
-        <p className="mt-1 text-[11px] text-gray-500 truncate">{hint}</p>
+        {hint && <p className="mt-1 text-[11px] text-gray-500 truncate">{hint}</p>}
       </div>
     </div>
   );
 }
+
+// ─── Breakdown bar list ──────────────────────────────────────────────────────
 
 function BreakdownCard({
   title,
   items,
   total,
-  accent,
+  accent = "#11131F",
+  formatValue,
   full = false,
 }: {
   title: string;
-  items: { key: string; total: number; rows: number }[];
+  items: { key: string; total: number; rows?: number }[];
   total: number;
-  accent: string;
+  accent?: string;
+  formatValue?: (v: number) => string;
   full?: boolean;
 }) {
   if (items.length === 0) return null;
+  const fmt = formatValue ?? ((v: number) => fmtMoney(v));
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5">
       <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">{title}</p>
@@ -1171,9 +161,11 @@ function BreakdownCard({
           return (
             <div key={it.key}>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="font-medium text-[#11131F] truncate" title={it.key}>{it.key}</span>
+                <span className="font-medium text-[#11131F] truncate" title={it.key}>
+                  {it.key}
+                </span>
                 <span className="text-gray-500 tabular ml-3 flex-shrink-0">
-                  {fmtMoney(it.total)} <span className="text-gray-300">·</span> {pct.toFixed(1)}%
+                  {fmt(it.total)} <span className="text-gray-300">·</span> {pct.toFixed(1)}%
                 </span>
               </div>
               <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
@@ -1190,12 +182,546 @@ function BreakdownCard({
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Estado vazio ────────────────────────────────────────────────────────────
+
+function EmptyState({
+  title,
+  description,
+  icon: Icon = Activity,
+}: {
+  title: string;
+  description: string;
+  icon?: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center">
+      <div className="w-10 h-10 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-3">
+        <Icon className="w-5 h-5 text-gray-400" />
+      </div>
+      <p className="text-sm font-medium text-[#11131F]">{title}</p>
+      <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
+// ─── Investment Section (REAL — planilha CUSTOS) ─────────────────────────────
+
+interface InvestmentPayload {
+  total: number;
+  lines: number;
+  source: "sheet" | "unavailable";
+  byChannel: { key: string; total: number; rows: number }[];
+  byCampaign: { key: string; total: number; rows: number }[];
+  byHospital: { key: string; total: number; rows: number }[];
+  daily: { date: string; cost: number }[];
+}
+
+function InvestmentSection({
+  data,
+  leads,
+}: {
+  data: InvestmentPayload | undefined;
+  leads: number;
+}) {
+  if (!data) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
+        <p className="text-sm text-gray-400">Carregando custos da planilha...</p>
+      </div>
+    );
+  }
+
+  if (data.source === "unavailable") {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-700" />
+          <p className="text-sm font-semibold text-amber-900">Aba CUSTOS ainda não conectada</p>
+        </div>
+        <p className="text-xs text-amber-800/80 leading-relaxed">
+          Publique a aba <b>CUSTOS</b> da planilha como CSV (Arquivo → Compartilhar → Publicar na
+          web → CUSTOS + Valores separados por vírgula) e cole a URL no Render como{" "}
+          <code className="bg-amber-100 px-1 rounded">SHEETS_CUSTOS_CSV_URL</code>.
+        </p>
+      </div>
+    );
+  }
+
+  if (data.total === 0) {
+    return (
+      <EmptyState
+        title="Sem custos no período selecionado"
+        description="A aba CUSTOS está conectada, mas não há lançamentos dentro do range do filtro."
+        icon={Wallet}
+      />
+    );
+  }
+
+  const cpl = leads > 0 ? data.total / leads : null;
+  const topChannel = data.byChannel[0];
+  const topCampaign = data.byCampaign[0];
+  const topHospital = data.byHospital[0];
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Investimento total"
+          value={fmtMoney(data.total)}
+          hint={`${data.lines} lançamento${data.lines === 1 ? "" : "s"}`}
+          accent="bg-[#DFFF00]/30"
+          icon={Wallet}
+        />
+        <KPICard
+          label="CPL (Custo por Lead)"
+          value={cpl != null ? fmtMoney(cpl, 2) : "—"}
+          hint={leads > 0 ? `${fmtNum(leads)} leads no período` : "Sem leads ainda"}
+          accent="bg-emerald-50"
+          icon={Target}
+        />
+        <KPICard
+          label="Canal #1"
+          value={topChannel?.key ?? "—"}
+          hint={topChannel ? fmtMoney(topChannel.total) : ""}
+          accent="bg-blue-50"
+          icon={TrendingUp}
+        />
+        <KPICard
+          label="Hospital #1"
+          value={topHospital?.key ?? "—"}
+          hint={topHospital ? fmtMoney(topHospital.total) : ""}
+          accent="bg-rose-50"
+          icon={Sparkles}
+        />
+      </div>
+
+      {/* Breakdowns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BreakdownCard title="Por canal" items={data.byChannel} total={data.total} />
+        <BreakdownCard title="Por hospital" items={data.byHospital} total={data.total} />
+      </div>
+      <BreakdownCard
+        title="Top campanhas"
+        items={data.byCampaign.slice(0, 10)}
+        total={data.total}
+        full
+      />
+
+      {/* Série diária */}
+      {data.daily.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                Investimento diário
+              </p>
+              <p className="text-sm text-gray-900 font-semibold">
+                {data.daily.length} {data.daily.length === 1 ? "dia" : "dias"} com lançamentos
+              </p>
+            </div>
+            <p className="text-xs text-gray-400">
+              Pico: {fmtMoney(Math.max(...data.daily.map((d) => d.cost)))}
+            </p>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data.daily}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                tickFormatter={fmtDayShort}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#94a3b8" }}
+                tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+              />
+              <RTooltip
+                formatter={(v: number) => [fmtMoney(v), "Custo"]}
+                labelFormatter={(l) => fmtDayShort(String(l))}
+                contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+              />
+              <Bar dataKey="cost" fill="#11131F" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <p className="text-[11px] text-gray-400 text-center">
+        Fonte: aba CUSTOS da planilha · atualiza a cada 5 min
+        {topCampaign && (
+          <>
+            {" "}
+            · Campanha #1: <b className="text-[#11131F]">{topCampaign.key}</b> (
+            {fmtMoney(topCampaign.total)})
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+// ─── Leads Section (REAL — monitor) ──────────────────────────────────────────
+
+interface OverviewPayload {
+  totalLeadsInPeriod: number;
+  contactedLeadsInPeriod: number;
+  contactedLeadsPercent: number;
+  validLeadsPercent: number;
+  invalidLeadsPercent: number;
+  avgTimeToFirstContactMinutes: number | null;
+  respondedWithin5MinPercent: number;
+  totalMessages: number;
+  messagesLast24h: number;
+  instancesOnline: number;
+  instancesOffline: number;
+  instancesTotal: number;
+  dailySeries: Array<{ date: string; newContacts: number; messages: number }>;
+  labelDistribution: Array<{
+    labelId: number;
+    labelName: string;
+    labelColor: string;
+    count: number;
+  }>;
+  operationDistribution: Array<{
+    instanceId: number;
+    alias: string;
+    uid: string;
+    color: string;
+    count: number;
+  }>;
+  topInstances: Array<{
+    instanceId: number;
+    alias: string;
+    uid: string;
+    contactCount: number;
+    messageCount: number;
+    status: string;
+  }>;
+  hourlyHeatmap: Array<{ hour: number; count: number }>;
+}
+
+function LeadsSection({ overview }: { overview: OverviewPayload | undefined }) {
+  if (!overview) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
+        <p className="text-sm text-gray-400">Carregando dados do monitor...</p>
+      </div>
+    );
+  }
+
+  if (overview.totalLeadsInPeriod === 0) {
+    return (
+      <EmptyState
+        title="Nenhum lead no período"
+        description="Não há contatos do monitor (waboxapp) com primeira mensagem dentro do range selecionado."
+        icon={Users}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Gráfico diário */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+              Volume diário
+            </p>
+            <p className="text-sm text-gray-900 font-semibold">
+              {fmtNum(overview.totalLeadsInPeriod)} leads ·{" "}
+              {fmtNum(overview.totalMessages)} mensagens
+            </p>
+          </div>
+          <p className="text-xs text-gray-400">
+            Pico:{" "}
+            {fmtNum(
+              Math.max(...overview.dailySeries.map((d) => d.newContacts), 0)
+            )}{" "}
+            leads/dia
+          </p>
+        </div>
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={overview.dailySeries}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: "#94a3b8" }}
+              tickFormatter={fmtDayShort}
+              interval="preserveStartEnd"
+            />
+            <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
+            <RTooltip
+              formatter={(v: number, name: string) => [
+                fmtNum(v),
+                name === "newContacts" ? "Leads" : "Mensagens",
+              ]}
+              labelFormatter={(l) => fmtDayShort(String(l))}
+              contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="newContacts"
+              stroke="#11131F"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 5, fill: "#DFFF00", stroke: "#11131F", strokeWidth: 2 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="messages"
+              stroke="#94a3b8"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Breakdown por instância e etiqueta */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {overview.operationDistribution.length > 0 && (
+          <BreakdownCard
+            title="Leads por operação (instância)"
+            items={overview.operationDistribution.map((o) => ({
+              key: o.alias || o.uid,
+              total: o.count,
+            }))}
+            total={overview.operationDistribution.reduce((acc, o) => acc + o.count, 0)}
+            accent="#11131F"
+            formatValue={(v) => fmtNum(v)}
+          />
+        )}
+        {overview.labelDistribution.length > 0 && (
+          <BreakdownCard
+            title="Leads por etiqueta"
+            items={overview.labelDistribution.map((l) => ({ key: l.labelName, total: l.count }))}
+            total={overview.labelDistribution.reduce((acc, l) => acc + l.count, 0)}
+            accent="#11131F"
+            formatValue={(v) => fmtNum(v)}
+          />
+        )}
+      </div>
+
+      {/* Top instâncias por volume */}
+      {overview.topInstances.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">
+            Top instâncias por volume (contatos + mensagens)
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {overview.topInstances.slice(0, 6).map((inst) => (
+              <div
+                key={inst.instanceId}
+                className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/40"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      inst.status === "online" ? "bg-emerald-500" : "bg-gray-300"
+                    }`}
+                  />
+                  <span className="text-sm font-medium text-[#11131F] truncate">
+                    {inst.alias || inst.uid}
+                  </span>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-[#11131F] tabular">
+                    {fmtNum(inst.contactCount)}
+                  </p>
+                  <p className="text-[10px] text-gray-400">{fmtNum(inst.messageCount)} msgs</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Quality Section (REAL — monitor) ────────────────────────────────────────
+
+function QualitySection({ overview }: { overview: OverviewPayload | undefined }) {
+  if (!overview) return null;
+  if (overview.totalLeadsInPeriod === 0) return null;
+
+  const QUALITY_PIE = [
+    { name: "Válidos", value: overview.validLeadsPercent, color: "#11131F" },
+    { name: "Inválidos", value: overview.invalidLeadsPercent, color: "#e2e8f0" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Leads contatados"
+          value={`${overview.contactedLeadsPercent.toFixed(1)}%`}
+          hint={`${fmtNum(overview.contactedLeadsInPeriod)} de ${fmtNum(
+            overview.totalLeadsInPeriod
+          )}`}
+          accent="bg-emerald-50"
+          icon={CheckCircle2}
+        />
+        <KPICard
+          label="Tempo até 1º contato"
+          value={
+            overview.avgTimeToFirstContactMinutes != null
+              ? `${overview.avgTimeToFirstContactMinutes.toFixed(1)} min`
+              : "—"
+          }
+          hint="Média do período"
+          accent="bg-amber-50"
+          icon={Timer}
+        />
+        <KPICard
+          label="Respondidos em ≤5min"
+          value={`${overview.respondedWithin5MinPercent.toFixed(1)}%`}
+          hint="Alvo: ≥80%"
+          accent="bg-blue-50"
+          icon={Clock}
+        />
+        <KPICard
+          label="Leads válidos"
+          value={`${overview.validLeadsPercent.toFixed(1)}%`}
+          hint="Lead respondeu pelo menos 1×"
+          accent="bg-violet-50"
+          icon={Activity}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Donut válidos/inválidos */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-2">
+            Qualidade da base
+          </p>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie
+                data={QUALITY_PIE}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={50}
+                outerRadius={70}
+                paddingAngle={2}
+              >
+                {QUALITY_PIE.map((entry, idx) => (
+                  <Cell key={idx} fill={entry.color} />
+                ))}
+              </Pie>
+              <RTooltip
+                formatter={(v: number, name: string) => [`${v.toFixed(1)}%`, name]}
+                contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="flex items-center justify-around text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#11131F]" />
+              <span className="text-gray-600">
+                Válidos <b className="text-[#11131F]">{overview.validLeadsPercent.toFixed(1)}%</b>
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-gray-200" />
+              <span className="text-gray-600">
+                Inválidos{" "}
+                <b className="text-[#11131F]">{overview.invalidLeadsPercent.toFixed(1)}%</b>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Heatmap horário */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 lg:col-span-2">
+          <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold mb-3">
+            Distribuição horária dos leads
+          </p>
+          <HourlyHeatmap data={overview.hourlyHeatmap} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HourlyHeatmap({ data }: { data: OverviewPayload["hourlyHeatmap"] }) {
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  const hours = Array.from({ length: 24 }, (_, h) => {
+    const found = data.find((d) => d.hour === h);
+    return { hour: h, count: found?.count ?? 0 };
+  });
+  return (
+    <div className="grid grid-cols-12 gap-1.5">
+      {hours.map((h) => {
+        const intensity = h.count / maxCount;
+        const bg = h.count === 0
+          ? "#f1f5f9"
+          : `rgba(17,19,31, ${Math.max(0.1, intensity)})`;
+        return (
+          <div key={h.hour} className="flex flex-col items-center gap-1" title={`${h.hour}h — ${h.count} leads`}>
+            <div
+              className="w-full aspect-square rounded-md border border-white"
+              style={{ background: bg }}
+            />
+            <span className="text-[9px] text-gray-400 tabular">{h.hour}h</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Infrastructure Section (REAL — monitor) ─────────────────────────────────
+
+function InfraSection({ overview }: { overview: OverviewPayload | undefined }) {
+  if (!overview) return null;
+  const uptime =
+    overview.instancesTotal > 0
+      ? (overview.instancesOnline / overview.instancesTotal) * 100
+      : 0;
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <KPICard
+        label="Canais online"
+        value={`${overview.instancesOnline}/${overview.instancesTotal}`}
+        hint={`${uptime.toFixed(0)}% disponíveis`}
+        accent={overview.instancesOffline > 0 ? "bg-rose-50" : "bg-emerald-50"}
+        icon={Smartphone}
+      />
+      <KPICard
+        label="Mensagens (24h)"
+        value={fmtNum(overview.messagesLast24h)}
+        hint={`${fmtNum(overview.totalMessages)} total na base`}
+        accent="bg-blue-50"
+        icon={MessageCircle}
+      />
+      <KPICard
+        label="Total de contatos"
+        value={fmtNum(overview.totalLeadsInPeriod)}
+        hint="No período filtrado"
+        accent="bg-[#DFFF00]/30"
+        icon={Users}
+      />
+      <KPICard
+        label="Etiquetas ativas"
+        value={fmtNum(overview.labelDistribution.length)}
+        hint={`${fmtNum(overview.labelDistribution.reduce((a, l) => a + l.count, 0))} leads marcados`}
+        accent="bg-violet-50"
+        icon={Tag}
+      />
+    </div>
+  );
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
 
 export function OperationalDashV2() {
   const { from, to, fromISO, toISO, days } = useDateRange();
 
-  // Input estável para evitar refetches infinitos
   const queryInput = useMemo(
     () => ({ dateFrom: fromISO, dateTo: toISO }),
     [fromISO, toISO]
@@ -1206,20 +732,19 @@ export function OperationalDashV2() {
     staleTime: 30_000,
   });
 
-  const leadsInPeriod = overview?.totalLeadsInPeriod ?? 0;
-  const contactedPercent = overview?.contactedLeadsPercent ?? 0;
-  const avgTimeToContact = overview?.avgTimeToFirstContactMinutes;
-
-  // Investimento real puxado da aba CUSTOS via Sheets publicado
   const { data: investment } = trpc.dashboard.investment.useQuery(queryInput, {
-    refetchInterval: 5 * 60_000, // CSV publicado atualiza ~5min
+    refetchInterval: 5 * 60_000,
     staleTime: 60_000,
   });
+
+  const leadsInPeriod = overview?.totalLeadsInPeriod ?? 0;
+  const investmentTotal = investment?.source === "sheet" ? investment.total : 0;
+  const cpl = leadsInPeriod > 0 && investmentTotal > 0 ? investmentTotal / leadsInPeriod : null;
 
   return (
     <div className="h-full overflow-y-auto bg-[#FAFAF7]">
       <div className="max-w-[1400px] mx-auto p-6 lg:p-10 pb-20">
-        {/* Faixa de período ativo — alimenta TODAS as métricas abaixo */}
+        {/* ─── Faixa de período ─── */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-3 px-4 py-3 rounded-2xl border border-[#11131F]/10 bg-white">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-[#DFFF00]/30 flex items-center justify-center">
@@ -1230,85 +755,81 @@ export function OperationalDashV2() {
                 Período em análise
               </p>
               <p className="text-sm font-semibold text-gray-900 tabular">
-                {fmtDate(from, "dd 'de' MMM", { locale: ptBR })} → {fmtDate(to, "dd 'de' MMM 'de' yyyy", { locale: ptBR })}
-                <span className="ml-2 text-xs font-normal text-gray-400">· {days} {days === 1 ? "dia" : "dias"}</span>
+                {fmtDate(from, "dd 'de' MMM", { locale: ptBR })} →{" "}
+                {fmtDate(to, "dd 'de' MMM 'de' yyyy", { locale: ptBR })}
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  · {days} {days === 1 ? "dia" : "dias"}
+                </span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Investimento (CUSTOS)</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Investimento</p>
               <p className="text-base font-bold text-[#11131F] tabular">
-                {investment?.source === "sheet"
-                  ? `R$ ${investment.total.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`
-                  : "—"}
+                {investment?.source === "sheet" ? fmtMoney(investmentTotal) : "—"}
               </p>
             </div>
             <div className="h-8 w-px bg-gray-200" />
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Leads (Monitor + Planilha)</p>
-              <p className="text-base font-bold text-[#11131F] tabular">{leadsInPeriod.toLocaleString("pt-BR")}</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">Leads</p>
+              <p className="text-base font-bold text-[#11131F] tabular">{fmtNum(leadsInPeriod)}</p>
             </div>
             <div className="h-8 w-px bg-gray-200" />
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Contatados</p>
-              <p className="text-base font-bold text-[#11131F] tabular">{contactedPercent.toFixed(1)}%</p>
-            </div>
-            <div className="h-8 w-px bg-gray-200" />
-            <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400">Tempo até 1º contato</p>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">CPL</p>
               <p className="text-base font-bold text-[#11131F] tabular">
-                {avgTimeToContact != null ? `${avgTimeToContact.toFixed(1)} min` : "—"}
+                {cpl != null ? fmtMoney(cpl, 2) : "—"}
+              </p>
+            </div>
+            <div className="h-8 w-px bg-gray-200" />
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400">
+                Contatados
+              </p>
+              <p className="text-base font-bold text-[#11131F] tabular">
+                {overview ? `${overview.contactedLeadsPercent.toFixed(1)}%` : "—"}
               </p>
             </div>
           </div>
         </div>
 
-        <HeroPriority />
-
-        <Section index="01" title="Funil da Operação" subtitle="Da geração de lead à cirurgia realizada">
-          <FunilOperacao />
-        </Section>
-
+        {/* ─── Seções reais ─── */}
         <Section
-          index="02"
-          title="Investimento Real (Planilha)"
-          subtitle="Custos lançados na aba CUSTOS — alimenta CAC, ROAS e ROI da PIPELINE"
+          index="01"
+          title="Investimento (Planilha CUSTOS)"
+          subtitle="Custos lançados na aba CUSTOS · alimenta CPL e CAC"
         >
           <InvestmentSection data={investment} leads={leadsInPeriod} />
         </Section>
 
-        <Section index="02b" title="Indicadores de Mídia" subtitle="Performance dos canais de aquisição">
-          <IndicadoresMidia />
+        <Section
+          index="02"
+          title="Volume de Leads (Monitor)"
+          subtitle="Contatos do waboxapp criados no período"
+        >
+          <LeadsSection overview={overview} />
         </Section>
 
-        <Section index="03" title="Qualidade do Lead" subtitle="Validade da base + velocidade de resposta">
-          <QualidadeLead />
+        <Section
+          index="03"
+          title="Qualidade do Atendimento (Monitor)"
+          subtitle="Velocidade de resposta e validade da base"
+        >
+          <QualitySection overview={overview} />
         </Section>
 
-        <Section index="04" title="Indicadores SDR" subtitle="Performance individual e do time">
-          <IndicadoresSDR />
-        </Section>
-
-        <Section index="05" title="Conversão do Funil" subtitle="Taxa de avanço entre cada etapa">
-          <ConversaoFunil />
-        </Section>
-
-        <Section index="06" title="Indicadores Financeiros" subtitle="Receita, custos e retorno do investimento">
-          <IndicadoresFinanceiros />
-        </Section>
-
-        <Section index="07" title="Análise por Canal" subtitle="Comparativo de canais e campanhas">
-          <AnaliseCanal />
-        </Section>
-
-        <Section index="08" title="Estrutura Técnica" subtitle="Status das integrações e fontes de dados">
-          <EstruturaTecnica />
+        <Section
+          index="04"
+          title="Infraestrutura (Monitor)"
+          subtitle="Status dos canais WhatsApp e volume bruto"
+        >
+          <InfraSection overview={overview} />
         </Section>
 
         <div className="mt-16 text-center">
           <p className="text-[11px] text-gray-400">
-            Painel atualizado em tempo real · Dados protegidos · Sougni · 2026
+            Dashboard 100% real · fontes: aba CUSTOS da planilha + banco do monitor · Sougni 2026
           </p>
         </div>
       </div>
