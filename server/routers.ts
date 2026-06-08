@@ -216,6 +216,22 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    /** Renomeia o canal (alias visível na sidebar e nos relatórios). */
+    updateAlias: protectedProcedure
+      .input(z.object({ id: z.number(), alias: z.string().trim().min(1).max(128) }))
+      .mutation(async ({ input }) => {
+        const allInstances = await getInstances(OWNER_ID);
+        const instance = allInstances.find((i) => i.id === input.id);
+        if (!instance) throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
+
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+        const { instances } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        await db.update(instances).set({ alias: input.alias }).where(eq(instances.id, input.id));
+        return { success: true, alias: input.alias };
+      }),
+
     checkStatus: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {

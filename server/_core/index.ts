@@ -278,8 +278,21 @@ async function startServer() {
         if (muid) {
           const { updateMessageAck } = await import("../db");
           await updateMessageAck(muid, ack);
+
+          // ACK semântico — WhatsApp:
+          //   0 = enviado pro servidor (clock)
+          //   1 = entregue (✓)
+          //   2 = recebido pelo destinatário (✓✓ cinza)
+          //   3 = lido (✓✓ azul)
+          // O event `message_read` é o gatilho para fluxos automáticos
+          // (ex: registrar leitura, abrir cadência de follow-up, etc).
           broadcastToUser(userId, "message_ack", { instanceId: instance.id, muid, ack });
-          console.log("[Webhook] ACK updated:", muid, "=>", ack);
+          if (ack === 2) {
+            broadcastToUser(userId, "message_delivered", { instanceId: instance.id, muid });
+          } else if (ack >= 3) {
+            broadcastToUser(userId, "message_read", { instanceId: instance.id, muid });
+          }
+          console.log("[Webhook] ACK updated:", muid, "=>", ack, ack >= 3 ? "(LIDO)" : ack === 2 ? "(entregue)" : "");
         }
       } else {
         console.log("[Webhook] Unknown event:", event);

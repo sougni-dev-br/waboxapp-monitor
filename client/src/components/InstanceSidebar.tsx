@@ -1,6 +1,8 @@
-import { Plus, Smartphone, Battery, BatteryCharging, LayoutDashboard, Globe, Wifi, WifiOff, Megaphone, Headphones } from "lucide-react";
+import { Plus, Smartphone, Battery, BatteryCharging, LayoutDashboard, Globe, Wifi, WifiOff, Megaphone, Headphones, Pencil } from "lucide-react";
+import { useState } from "react";
 import { formatPhoneUid } from "@/lib/formatPhone";
 import type { OfflineAlertItem } from "./OfflineAlert";
+import { InstanceAliasEditor } from "./InstanceAliasEditor";
 
 interface Instance {
   id: number;
@@ -179,6 +181,7 @@ function InstanceItem({
   hasAlert: boolean;
   onClick: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
   const isOnline = instance.status === "online";
   const isOffline = instance.status === "offline";
 
@@ -186,53 +189,82 @@ function InstanceItem({
   const tooltipText = instance.alias ? `${instance.alias} · ${instance.uid}` : instance.uid;
 
   return (
-    <button
-      onClick={onClick}
-      title={tooltipText}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all group ${
-        isSelected
-          ? "bg-sidebar-accent shadow-sm"
-          : "hover:bg-muted/50"
-      }`}
-    >
-      {/* Avatar */}
-      <div className="relative flex-shrink-0">
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
-          isSelected ? "bg-card border border-border" : "bg-muted group-hover:bg-card group-hover:border group-hover:border-border"
-        }`}>
-          <Smartphone className="w-4 h-4 text-foreground/60" />
-        </div>
-        {/* Status dot */}
-        <span
-          className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-sidebar ${
-            isOnline ? "bg-emerald-500" : isOffline ? "bg-destructive" : "bg-muted-foreground/40"
-          } ${hasAlert ? "pulse-alert" : ""}`}
-          aria-label={isOnline ? "online" : isOffline ? "offline" : "desconhecido"}
-        />
+    <>
+      <div
+        className={`relative w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all group ${
+          isSelected ? "bg-sidebar-accent shadow-sm" : "hover:bg-muted/50"
+        }`}
+      >
+        <button
+          onClick={onClick}
+          title={tooltipText}
+          className="flex-1 flex items-center gap-2.5 text-left min-w-0"
+        >
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                isSelected
+                  ? "bg-card border border-border"
+                  : "bg-muted group-hover:bg-card group-hover:border group-hover:border-border"
+              }`}
+            >
+              <Smartphone className="w-4 h-4 text-foreground/60" />
+            </div>
+            {/* Status dot */}
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-sidebar ${
+                isOnline ? "bg-emerald-500" : isOffline ? "bg-destructive" : "bg-muted-foreground/40"
+              } ${hasAlert ? "pulse-alert" : ""}`}
+              aria-label={isOnline ? "online" : isOffline ? "offline" : "desconhecido"}
+            />
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1">
+              <span className={`text-sm font-medium truncate ${isSelected ? "text-foreground" : "text-foreground/85"}`}>
+                {displayName}
+              </span>
+              {instance.battery !== null && instance.battery !== undefined && (
+                <BatteryIndicator battery={instance.battery} plugged={instance.plugged ?? false} />
+              )}
+            </div>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span
+                className={`text-[11px] font-medium ${
+                  isOnline ? "text-emerald-600" : isOffline ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {isOnline ? "Ativo" : isOffline ? "Offline" : "—"}
+              </span>
+              {instance.platform && (
+                <span className="text-[11px] text-muted-foreground capitalize">· {instance.platform}</span>
+              )}
+            </div>
+          </div>
+        </button>
+
+        {/* Botão de editar nome — aparece no hover */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing(true);
+          }}
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-card text-muted-foreground hover:text-foreground"
+          title="Renomear canal"
+          aria-label="Renomear canal"
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
       </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1">
-          <span className={`text-sm font-medium truncate ${isSelected ? "text-foreground" : "text-foreground/85"}`}>
-            {displayName}
-          </span>
-          {instance.battery !== null && instance.battery !== undefined && (
-            <BatteryIndicator battery={instance.battery} plugged={instance.plugged ?? false} />
-          )}
-        </div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className={`text-[11px] font-medium ${
-            isOnline ? "text-emerald-600" : isOffline ? "text-destructive" : "text-muted-foreground"
-          }`}>
-            {isOnline ? "Ativo" : isOffline ? "Offline" : "—"}
-          </span>
-          {instance.platform && (
-            <span className="text-[11px] text-muted-foreground capitalize">· {instance.platform}</span>
-          )}
-        </div>
-      </div>
-    </button>
+      <InstanceAliasEditor
+        instance={instance}
+        open={editing}
+        onClose={() => setEditing(false)}
+      />
+    </>
   );
 }
 
