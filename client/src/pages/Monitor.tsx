@@ -18,6 +18,7 @@ import { OperationCenter } from "@/components/OperationCenter";
 import { SougniLogo } from "@/components/SougniLogo";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { HospitalFilterButtons } from "@/components/HospitalFilter";
+import { AdminMenu } from "@/components/AdminMenu";
 import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
 
@@ -318,6 +319,8 @@ export default function Monitor() {
               Configurações
             </button>
           )}
+
+          <AdminMenu />
 
           {/* Identidade do user logado */}
           {user && (

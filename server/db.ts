@@ -1313,8 +1313,12 @@ export async function getOperationOverview(
   const instIdsList = `ARRAY[${instIds.join(",")}]::int[]`;
 
   // ─── KPIs principais ─────────────────────────────────────────────────────
-  // Usa CTE pra calcular first_in, first_out, last_msg por contato no período
-  const kpisRes = await db.execute(sql`
+  // Buscamos os timestamps brutos por contato e calculamos TMA/TME/SLA em
+  // JS aplicando businessMinutesBetween (seg-sex 08-17h BRT) — assim um lead
+  // que chega 22h e responde 9h do dia seguinte não conta 11h, mas só 1h.
+  const { businessMinutesBetween } = await import("./businessHours");
+
+  const perContactRes = await db.execute(sql`
     WITH per_contact AS (
       SELECT
         c.id AS contact_id,
@@ -1331,17 +1335,46 @@ export async function getOperationOverview(
       GROUP BY c.id
     )
     SELECT
-      AVG(EXTRACT(EPOCH FROM (last_msg - first_msg)) / 60.0) FILTER (WHERE msg_count > 1) AS tma_minutes,
-      AVG(EXTRACT(EPOCH FROM (first_out - first_in)) / 60.0) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in) AS tme_minutes,
-      COUNT(*) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in AND EXTRACT(EPOCH FROM (first_out - first_in)) <= 300) AS within_5min,
-      COUNT(*) FILTER (WHERE first_in IS NOT NULL AND first_out IS NOT NULL AND first_out >= first_in) AS attended_count,
-      COUNT(*) AS total_atendimentos,
-      COUNT(*) FILTER (WHERE last_dir = 'in') AS conversas_abertas,
-      COUNT(*) FILTER (WHERE last_dir = 'out') AS conversas_resolvidas,
-      COUNT(*) FILTER (WHERE last_msg < NOW() - INTERVAL '24 hours') AS conversas_inativas
+      contact_id,
+      first_in, first_out, last_msg, first_msg, msg_count, last_dir,
+      last_msg < NOW() - INTERVAL '24 hours' AS is_inactive
     FROM per_contact
   `);
-  const kpiRow = (kpisRes as unknown as { rows: any[] }).rows[0] ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const perContactRows = ((perContactRes as unknown as { rows: any[] }).rows ?? []);
+
+  let tmaSum = 0, tmaCount = 0;
+  let tmeSum = 0, tmeCount = 0;
+  let within5Min = 0, attendedCount = 0;
+  let conversasAbertas = 0, conversasResolvidas = 0, conversasInativas = 0;
+  for (const row of perContactRows) {
+    if (row.first_in && row.first_out && new Date(row.first_out).getTime() >= new Date(row.first_in).getTime()) {
+      const tme = businessMinutesBetween(row.first_in, row.first_out);
+      tmeSum += tme;
+      tmeCount += 1;
+      if (tme <= 5) within5Min += 1;
+      attendedCount += 1;
+    }
+    if (Number(row.msg_count) > 1 && row.first_msg && row.last_msg) {
+      const tma = businessMinutesBetween(row.first_msg, row.last_msg);
+      tmaSum += tma;
+      tmaCount += 1;
+    }
+    if (row.last_dir === "in") conversasAbertas += 1;
+    else if (row.last_dir === "out") conversasResolvidas += 1;
+    if (row.is_inactive) conversasInativas += 1;
+  }
+  const totalAtend = perContactRows.length;
+  const kpiRow = {
+    tma_minutes: tmaCount > 0 ? tmaSum / tmaCount : null,
+    tme_minutes: tmeCount > 0 ? tmeSum / tmeCount : null,
+    within_5min: within5Min,
+    attended_count: attendedCount,
+    total_atendimentos: totalAtend,
+    conversas_abertas: conversasAbertas,
+    conversas_resolvidas: conversasResolvidas,
+    conversas_inativas: conversasInativas,
+  };
 
   // Total messages in/out
   const [msgInRow] = await db.select({ count: sql<number>`COUNT(*)::int` })
@@ -1353,15 +1386,15 @@ export async function getOperationOverview(
     .where(and(inArray(messages.instanceId, instIds), eq(messages.direction, "out"),
                gte(messages.createdAt, periodStart), lte(messages.createdAt, periodEnd)));
 
-  const attendedCount = Number(kpiRow.attended_count ?? 0);
+  const attendedCnt = Number(kpiRow.attended_count ?? 0);
   const within5 = Number(kpiRow.within_5min ?? 0);
-  const totalAtend = Number(kpiRow.total_atendimentos ?? 0);
+  const totalAtendKpi = Number(kpiRow.total_atendimentos ?? 0);
 
   const kpis: OperationKPIs = {
     tmaMinutes: kpiRow.tma_minutes != null ? Math.round(Number(kpiRow.tma_minutes) * 10) / 10 : null,
     tmeMinutes: kpiRow.tme_minutes != null ? Math.round(Number(kpiRow.tme_minutes) * 10) / 10 : null,
-    slaPercent: attendedCount > 0 ? Math.round((within5 / attendedCount) * 100) : 0,
-    totalAtendimentos: totalAtend,
+    slaPercent: attendedCnt > 0 ? Math.round((within5 / attendedCnt) * 100) : 0,
+    totalAtendimentos: totalAtendKpi,
     totalMessagesIn: Number(msgInRow?.count ?? 0),
     totalMessagesOut: Number(msgOutRow?.count ?? 0),
     conversasAbertas: Number(kpiRow.conversas_abertas ?? 0),
@@ -1403,26 +1436,33 @@ export async function getOperationOverview(
     ORDER BY wait_min DESC
     LIMIT 50
   `);
-  const queue: QueueItem[] = ((queueRes as unknown as { rows: any[] }).rows ?? []).map((r) => {
-    let text = "";
-    try {
-      const body = typeof r.last_body === "string" ? JSON.parse(r.last_body) : r.last_body;
-      text = body?.text ?? body?.caption ?? `[${r.last_type ?? "msg"}]`;
-    } catch {
-      text = "[mensagem]";
-    }
-    return {
-      contactId: Number(r.contact_id),
-      contactName: r.contact_name,
-      contactUid: r.contact_uid,
-      instanceId: Number(r.instance_id),
-      instanceAlias: r.instance_alias,
-      lastMessageAt: new Date(r.last_message_at),
-      lastMessageText: String(text).slice(0, 200),
-      waitMinutes: Math.round(Number(r.wait_min) * 10) / 10,
-      inboundCount: Number(r.inbound_count ?? 0),
-    };
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const queueRows = ((queueRes as unknown as { rows: any[] }).rows ?? []);
+  const nowMs = new Date();
+  const queue: QueueItem[] = queueRows
+    .map((r) => {
+      let text = "";
+      try {
+        const body = typeof r.last_body === "string" ? JSON.parse(r.last_body) : r.last_body;
+        text = body?.text ?? body?.caption ?? `[${r.last_type ?? "msg"}]`;
+      } catch {
+        text = "[mensagem]";
+      }
+      // Tempo de espera em minutos COMERCIAIS (seg-sex 08-17h BRT)
+      const waitMinutes = businessMinutesBetween(r.last_message_at, nowMs);
+      return {
+        contactId: Number(r.contact_id),
+        contactName: r.contact_name,
+        contactUid: r.contact_uid,
+        instanceId: Number(r.instance_id),
+        instanceAlias: r.instance_alias,
+        lastMessageAt: new Date(r.last_message_at),
+        lastMessageText: String(text).slice(0, 200),
+        waitMinutes: Math.round(waitMinutes * 10) / 10,
+        inboundCount: Number(r.inbound_count ?? 0),
+      };
+    })
+    .sort((a, b) => b.waitMinutes - a.waitMinutes);
 
   // ─── Performance por Operadora (instância) ─────────────────────────────
   const opsRes = await db.execute(sql`

@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as jose from "jose";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { ENV } from "./_core/env";
 import {
   applyLabelsToContact,
@@ -40,7 +40,7 @@ import {
 import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
-import { findUserByUsername, verifyPassword, touchLastSignedIn, PERMISSIONS } from "./auth";
+import { findUserByUsername, verifyPassword, touchLastSignedIn, hashPassword, PERMISSIONS } from "./auth";
 import { getInvestmentSummary, getPipelineSummary, normalizeHospital } from "./sheetsIngest";
 
 // ID fixo do painel (único usuário do sistema)
@@ -140,6 +140,132 @@ export const appRouter = router({
       const cookiePath = process.env.COOKIE_PATH ?? "/";
       ctx.res.clearCookie("panel_session", { path: cookiePath });
       return { success: true } as const;
+    }),
+  }),
+
+  // ─── Admin (admin-only) ─────────────────────────────────────────────────────
+  // CRUD de usuários e regras de automação. Tudo passa por adminProcedure,
+  // que valida ctx.user.role === 'admin' (server-side, ignora UI).
+  admin: router({
+    users: router({
+      list: adminProcedure.query(async () => {
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) return [];
+        const { users } = await import("../drizzle/schema");
+        const rows = await db.select({
+          id: users.id,
+          username: users.username,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          active: users.active,
+          createdAt: users.createdAt,
+          lastSignedIn: users.lastSignedIn,
+        }).from(users).orderBy(users.id);
+        return rows;
+      }),
+      create: adminProcedure
+        .input(z.object({
+          username: z.string().trim().min(2).max(64).regex(/^[a-z0-9_.-]+$/i, "Use letras, números, _, . ou -"),
+          name: z.string().trim().min(1).max(128),
+          password: z.string().min(6, "Mínimo 6 caracteres").max(128),
+          role: z.enum(["admin", "user"]).default("user"),
+        }))
+        .mutation(async ({ input }) => {
+          const db = await import("./db").then((m) => m.getDb());
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+          const { users } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const username = input.username.toLowerCase();
+          const existing = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
+          if (existing[0]) {
+            throw new TRPCError({ code: "CONFLICT", message: `Username '${username}' já existe.` });
+          }
+          const passwordHash = await hashPassword(input.password);
+          const inserted = await db.insert(users).values({
+            openId: `user-${username}-${Date.now()}`,
+            username,
+            passwordHash,
+            name: input.name,
+            role: input.role,
+            active: true,
+            loginMethod: "password",
+          }).returning({ id: users.id });
+          return { id: inserted[0]?.id, username, role: input.role };
+        }),
+      delete: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input, ctx }) => {
+          if (ctx.user.id === input.id) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode se autodeletar." });
+          }
+          const db = await import("./db").then((m) => m.getDb());
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+          const { users } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          // Soft delete: marca inativo (preserva foreign keys)
+          await db.update(users).set({ active: false }).where(eq(users.id, input.id));
+          return { success: true };
+        }),
+    }),
+
+    automation: router({
+      list: adminProcedure.query(async () => {
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) return [];
+        const { automationRules } = await import("../drizzle/schema");
+        const { desc } = await import("drizzle-orm");
+        return db.select().from(automationRules).orderBy(desc(automationRules.updatedAt));
+      }),
+      upsert: adminProcedure
+        .input(z.object({
+          id: z.number().optional(),
+          name: z.string().trim().min(1).max(128),
+          trigger: z.enum([
+            "lead_in",                // novo lead chegou
+            "lead_no_reply_5min",     // sem resposta há 5 min comerciais
+            "lead_no_reply_30min",    // sem resposta há 30 min comerciais
+            "lead_read_no_reply",     // operador leu mas não respondeu
+            "lead_keyword_match",     // mensagem do lead bate com keywords
+          ]),
+          hospital: z.string().trim().max(64).optional().nullable(),
+          keywords: z.string().trim().max(2048).optional().nullable(),
+          delayMinutes: z.number().int().min(0).max(60 * 24).default(0),
+          message: z.string().trim().min(1).max(4096),
+          active: z.boolean().default(true),
+        }))
+        .mutation(async ({ input, ctx }) => {
+          const db = await import("./db").then((m) => m.getDb());
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+          const { automationRules } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          const payload = {
+            userId: ctx.user.id,
+            name: input.name,
+            trigger: input.trigger,
+            hospital: input.hospital ?? null,
+            keywords: input.keywords ?? null,
+            delayMinutes: input.delayMinutes,
+            message: input.message,
+            active: input.active,
+          };
+          if (input.id) {
+            await db.update(automationRules).set(payload).where(eq(automationRules.id, input.id));
+            return { id: input.id };
+          }
+          const inserted = await db.insert(automationRules).values(payload).returning({ id: automationRules.id });
+          return { id: inserted[0]?.id };
+        }),
+      delete: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await import("./db").then((m) => m.getDb());
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+          const { automationRules } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await db.delete(automationRules).where(eq(automationRules.id, input.id));
+          return { success: true };
+        }),
     }),
   }),
 

@@ -235,3 +235,37 @@ export const statusLogs = pgTable(
 
 export type StatusLog = typeof statusLogs.$inferSelect;
 export type InsertStatusLog = typeof statusLogs.$inferInsert;
+
+// ─── automation_rules ────────────────────────────────────────────────────────
+//
+// Regras configuráveis pelo admin pra disparar mensagens automáticas baseadas
+// em triggers (lead entrou, sem resposta há X min, mensagem lida sem retorno
+// etc) e contexto (hospital, procedimento, palavra-chave de objeção).
+export const automationRules = pgTable(
+  "automation_rules",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    name: varchar("name", { length: 128 }).notNull(),
+    /** Evento que dispara a regra. */
+    trigger: varchar("trigger", { length: 64 }).notNull(),
+    /** Hospital alvo (null = qualquer). */
+    hospital: varchar("hospital", { length: 64 }),
+    /** Lista de palavras-chave/objeções (uma por linha). */
+    keywords: text("keywords"),
+    /** Atraso pra disparar (em minutos comerciais). */
+    delayMinutes: integer("delayMinutes").default(0).notNull(),
+    /** Texto da mensagem a enviar — suporta {{nome}}, {{hospital}}, {{procedimento}}. */
+    message: text("message").notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    userIdx: index("automation_rules_userId_idx").on(t.userId),
+    triggerIdx: index("automation_rules_trigger_idx").on(t.trigger),
+  })
+);
+
+export type AutomationRule = typeof automationRules.$inferSelect;
+export type InsertAutomationRule = typeof automationRules.$inferInsert;

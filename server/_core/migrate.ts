@@ -25,7 +25,7 @@ export async function ensureAuthSchema(): Promise<void> {
   }
 
   try {
-    // 1. Adicionar colunas (idempotente)
+    // 1. Adicionar colunas users (idempotente)
     await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" varchar(64)`);
     await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" varchar(128)`);
     await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true NOT NULL`);
@@ -33,7 +33,26 @@ export async function ensureAuthSchema(): Promise<void> {
     // 2. Índice único de username (case-insensitive via LOWER)
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "users_username_unique" ON "users" ("username")`);
 
-    console.log("[migrate] Schema de auth verificado");
+    // 3. Tabela automation_rules
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "automation_rules" (
+        "id" serial PRIMARY KEY,
+        "userId" integer NOT NULL,
+        "name" varchar(128) NOT NULL,
+        "trigger" varchar(64) NOT NULL,
+        "hospital" varchar(64),
+        "keywords" text,
+        "delayMinutes" integer DEFAULT 0 NOT NULL,
+        "message" text NOT NULL,
+        "active" boolean DEFAULT true NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS "automation_rules_userId_idx" ON "automation_rules" ("userId")`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS "automation_rules_trigger_idx" ON "automation_rules" ("trigger")`);
+
+    console.log("[migrate] Schema de auth + automation verificado");
   } catch (err) {
     console.error("[migrate] Falha ao aplicar ensureAuthSchema:", err);
     throw err;
