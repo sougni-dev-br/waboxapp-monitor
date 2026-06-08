@@ -649,13 +649,16 @@ function HourlyHeatmap({ data }: { data: OverviewPayload["hourlyHeatmap"] }) {
     <div className="grid grid-cols-12 gap-1.5">
       {hours.map((h) => {
         const intensity = h.count / maxCount;
+        // Horas vazias agora têm padrão visível (cinza claro com borda); horas
+        // com atividade ficam num gradiente do lime suave até ink Sougni.
         const bg = h.count === 0
-          ? "#f1f5f9"
-          : `rgba(17,19,31, ${Math.max(0.1, intensity)})`;
+          ? "#e2e8f0"
+          : `rgba(17,19,31, ${Math.max(0.18, intensity)})`;
+        const isEmpty = h.count === 0;
         return (
           <div key={h.hour} className="flex flex-col items-center gap-1" title={`${h.hour}h — ${h.count} leads`}>
             <div
-              className="w-full aspect-square rounded-md border border-white"
+              className={`w-full aspect-square rounded-md ${isEmpty ? "border border-gray-300" : "border border-white"}`}
               style={{ background: bg }}
             />
             <span className="text-[9px] text-gray-400 tabular">{h.hour}h</span>

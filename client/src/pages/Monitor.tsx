@@ -60,7 +60,8 @@ export default function Monitor() {
 
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [centerView, setCenterView] = useState<CenterView>("contacts");
+  // Estado inicial é "dashboard" pra usuário entrar direto na visão executiva.
+  const [centerView, setCenterView] = useState<CenterView>("dashboard");
   const [offlineAlerts, setOfflineAlerts] = useState<OfflineAlertItem[]>([]);
   const [showConfig, setShowConfig] = useState(false);
   const [showAddInstance, setShowAddInstance] = useState(false);
