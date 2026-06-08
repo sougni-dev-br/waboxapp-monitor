@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { X, Plus, Trash2, Tag, Zap, ChevronDown, RefreshCw, CheckCircle2 } from "lucide-react";
+import { X, Plus, Trash2, Tag, Zap, ChevronDown, RefreshCw, CheckCircle2, Pencil, Check } from "lucide-react";
 import { toast } from "sonner";
 
 interface LabelsModalProps {
@@ -31,6 +31,19 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
   const [reapplyDaysBack, setReapplyDaysBack] = useState(90);
   const [reapplyResult, setReapplyResult] = useState<{ processed: number; labeled: number } | null>(null);
 
+  // edição inline de marcador
+  const [editingLabelId, setEditingLabelId] = useState<number | null>(null);
+  const [editLabelName, setEditLabelName] = useState("");
+  const [editLabelColor, setEditLabelColor] = useState("#6366f1");
+  const [confirmDeleteLabelId, setConfirmDeleteLabelId] = useState<number | null>(null);
+
+  // edição inline de regra
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null);
+  const [editRuleKeyword, setEditRuleKeyword] = useState("");
+  const [editRuleMatchType, setEditRuleMatchType] = useState<"contains" | "starts_with" | "exact">("contains");
+  const [editRuleLabelId, setEditRuleLabelId] = useState<number | null>(null);
+  const [confirmDeleteRuleId, setConfirmDeleteRuleId] = useState<number | null>(null);
+
   const utils = trpc.useUtils();
 
   const { data: labels = [] } = trpc.labels.list.useQuery();
@@ -50,7 +63,20 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
       utils.labels.list.invalidate();
       utils.labelRules.list.invalidate();
       utils.contacts.list.invalidate();
+      utils.contacts.listAll.invalidate();
+      setConfirmDeleteLabelId(null);
       toast.success("Marcador removido.");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const updateLabel = trpc.labels.update.useMutation({
+    onSuccess: () => {
+      utils.labels.list.invalidate();
+      utils.contacts.list.invalidate();
+      utils.contacts.listAll.invalidate();
+      setEditingLabelId(null);
+      toast.success("Marcador atualizado.");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -68,7 +94,17 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
   const deleteRule = trpc.labelRules.delete.useMutation({
     onSuccess: () => {
       utils.labelRules.list.invalidate();
+      setConfirmDeleteRuleId(null);
       toast.success("Regra removida.");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const updateRule = trpc.labelRules.update.useMutation({
+    onSuccess: () => {
+      utils.labelRules.list.invalidate();
+      setEditingRuleId(null);
+      toast.success("Regra atualizada.");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -181,30 +217,125 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {labels.map((label) => (
-                    <div
-                      key={label.id}
-                      className="flex items-center justify-between px-3 py-2.5 bg-white border border-gray-100 rounded-xl"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: label.color }}
-                        />
-                        <span className="text-sm text-gray-800 font-medium">{label.name}</span>
-                        <span className="text-xs text-gray-400">
-                          {rules.filter((r) => r.labelId === label.id).length} regra(s)
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => deleteLabel.mutate({ id: label.id })}
-                        disabled={deleteLabel.isPending}
-                        className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                  {labels.map((label) => {
+                    const ruleCount = rules.filter((r) => r.labelId === label.id).length;
+                    const isEditing = editingLabelId === label.id;
+                    const isConfirmingDelete = confirmDeleteLabelId === label.id;
+
+                    if (isEditing) {
+                      return (
+                        <div key={label.id} className="px-3 py-3 bg-indigo-50/40 border border-indigo-200 rounded-xl space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editLabelName}
+                              autoFocus
+                              onChange={(e) => setEditLabelName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && editLabelName.trim()) {
+                                  updateLabel.mutate({ id: label.id, name: editLabelName.trim(), color: editLabelColor });
+                                }
+                                if (e.key === "Escape") setEditingLabelId(null);
+                              }}
+                              className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {PRESET_COLORS.map((color) => (
+                              <button
+                                key={color}
+                                onClick={() => setEditLabelColor(color)}
+                                style={{ backgroundColor: color }}
+                                className={`w-5 h-5 rounded-full transition-transform ${
+                                  editLabelColor === color ? "scale-125 ring-2 ring-offset-1 ring-gray-300" : "hover:scale-110"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setEditingLabelId(null)}
+                              className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() =>
+                                editLabelName.trim() &&
+                                updateLabel.mutate({ id: label.id, name: editLabelName.trim(), color: editLabelColor })
+                              }
+                              disabled={!editLabelName.trim() || updateLabel.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-40"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              {updateLabel.isPending ? "Salvando..." : "Salvar"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={label.id}
+                        className="flex items-center justify-between px-3 py-2.5 bg-white border border-gray-100 rounded-xl"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: label.color }}
+                          />
+                          <span className="text-sm text-gray-800 font-medium truncate">{label.name}</span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">
+                            {ruleCount} regra(s)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isConfirmingDelete ? (
+                            <>
+                              <span className="text-xs text-red-600 mr-1">
+                                Apagar{ruleCount > 0 ? ` + ${ruleCount} regra(s)` : ""}?
+                              </span>
+                              <button
+                                onClick={() => deleteLabel.mutate({ id: label.id })}
+                                disabled={deleteLabel.isPending}
+                                className="px-2 py-1 text-xs font-medium bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                              >
+                                {deleteLabel.isPending ? "..." : "Sim"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteLabelId(null)}
+                                className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded-md"
+                              >
+                                Não
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingLabelId(label.id);
+                                  setEditLabelName(label.name);
+                                  setEditLabelColor(label.color);
+                                }}
+                                title="Editar"
+                                className="p-1.5 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded-lg transition-colors"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteLabelId(label.id)}
+                                title="Remover"
+                                className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -386,6 +517,87 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
                   <p className="text-xs text-gray-400">Todas as regras são verificadas — o contato recebe cada marcador cuja regra casar.</p>
                   {rules.map((rule, index) => {
                     const label = labels.find((l) => l.id === rule.labelId);
+                    const isEditing = editingRuleId === rule.id;
+                    const isConfirmingDelete = confirmDeleteRuleId === rule.id;
+
+                    if (isEditing) {
+                      return (
+                        <div key={rule.id} className="px-3 py-3 bg-indigo-50/40 border border-indigo-200 rounded-xl space-y-2">
+                          <input
+                            type="text"
+                            value={editRuleKeyword}
+                            autoFocus
+                            onChange={(e) => setEditRuleKeyword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setEditingRuleId(null);
+                            }}
+                            placeholder="palavra-chave"
+                            className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-300"
+                          />
+                          <div className="flex gap-2 flex-wrap">
+                            {(["contains", "starts_with", "exact"] as const).map((type) => (
+                              <button
+                                key={type}
+                                onClick={() => setEditRuleMatchType(type)}
+                                className={`px-2.5 py-1 text-xs rounded-md border ${
+                                  editRuleMatchType === type
+                                    ? "border-gray-800 bg-gray-900 text-white"
+                                    : "border-gray-200 text-gray-600 hover:border-gray-300"
+                                }`}
+                              >
+                                {MATCH_TYPE_LABELS[type]}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {labels.map((l) => (
+                              <button
+                                key={l.id}
+                                onClick={() => setEditRuleLabelId(l.id)}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                                  editRuleLabelId === l.id
+                                    ? "border-transparent text-white"
+                                    : "border-gray-200 text-gray-600 hover:border-gray-300"
+                                }`}
+                                style={editRuleLabelId === l.id ? { backgroundColor: l.color } : {}}
+                              >
+                                <div
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: editRuleLabelId === l.id ? "white" : l.color }}
+                                />
+                                {l.name}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => setEditingRuleId(null)}
+                              className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() =>
+                                editRuleKeyword.trim() &&
+                                editRuleLabelId &&
+                                updateRule.mutate({
+                                  id: rule.id,
+                                  keyword: editRuleKeyword.trim(),
+                                  matchType: editRuleMatchType,
+                                  labelId: editRuleLabelId,
+                                })
+                              }
+                              disabled={!editRuleKeyword.trim() || !editRuleLabelId || updateRule.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-40"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              {updateRule.isPending ? "Salvando..." : "Salvar"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div
                         key={rule.id}
@@ -413,13 +625,48 @@ export function LabelsModal({ open, onClose }: LabelsModalProps) {
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => deleteRule.mutate({ id: rule.id })}
-                          disabled={deleteRule.isPending}
-                          className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors flex-shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isConfirmingDelete ? (
+                            <>
+                              <span className="text-xs text-red-600 mr-1">Apagar?</span>
+                              <button
+                                onClick={() => deleteRule.mutate({ id: rule.id })}
+                                disabled={deleteRule.isPending}
+                                className="px-2 py-1 text-xs font-medium bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                              >
+                                {deleteRule.isPending ? "..." : "Sim"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteRuleId(null)}
+                                className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded-md"
+                              >
+                                Não
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingRuleId(rule.id);
+                                  setEditRuleKeyword(rule.keyword);
+                                  setEditRuleMatchType(rule.matchType);
+                                  setEditRuleLabelId(rule.labelId);
+                                }}
+                                title="Editar"
+                                className="p-1.5 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded-lg"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteRuleId(rule.id)}
+                                title="Remover"
+                                className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

@@ -195,9 +195,28 @@ export async function createLabel(data: InsertLabel): Promise<number> {
 export async function deleteLabel(id: number, userId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  // 1) Apaga regras que apontam para esse marcador
   await db.delete(labelRules).where(and(eq(labelRules.labelId, id), eq(labelRules.userId, userId)));
-  await db.delete(labels).where(and(eq(labels.id, id), eq(labels.userId, userId)));
+  // 2) Apaga associações N:N em contact_labels (sem FK declarada — limpeza explícita)
+  await db.delete(contactLabels).where(eq(contactLabels.labelId, id));
+  // 3) Zera o legacy contacts.labelId que ainda aponta pra esse label
   await db.update(contacts).set({ labelId: null }).where(eq(contacts.labelId, id));
+  // 4) Finalmente apaga o próprio label
+  await db.delete(labels).where(and(eq(labels.id, id), eq(labels.userId, userId)));
+}
+
+export async function updateLabel(
+  id: number,
+  userId: number,
+  data: { name?: string; color?: string }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const patch: Partial<{ name: string; color: string }> = {};
+  if (data.name !== undefined) patch.name = data.name;
+  if (data.color !== undefined) patch.color = data.color;
+  if (Object.keys(patch).length === 0) return;
+  await db.update(labels).set(patch).where(and(eq(labels.id, id), eq(labels.userId, userId)));
 }
 
 // ─── Label Rules ─────────────────────────────────────────────────────────────
@@ -219,6 +238,21 @@ export async function deleteLabelRule(id: number, userId: number): Promise<void>
   const db = await getDb();
   if (!db) return;
   await db.delete(labelRules).where(and(eq(labelRules.id, id), eq(labelRules.userId, userId)));
+}
+
+export async function updateLabelRule(
+  id: number,
+  userId: number,
+  data: { labelId?: number; keyword?: string; matchType?: "contains" | "starts_with" | "exact" }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const patch: Partial<{ labelId: number; keyword: string; matchType: "contains" | "starts_with" | "exact" }> = {};
+  if (data.labelId !== undefined) patch.labelId = data.labelId;
+  if (data.keyword !== undefined) patch.keyword = data.keyword;
+  if (data.matchType !== undefined) patch.matchType = data.matchType;
+  if (Object.keys(patch).length === 0) return;
+  await db.update(labelRules).set(patch).where(and(eq(labelRules.id, id), eq(labelRules.userId, userId)));
 }
 
 /**

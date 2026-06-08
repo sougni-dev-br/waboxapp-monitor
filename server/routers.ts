@@ -9,6 +9,8 @@ import {
   contactHasLabel,
   createInstance,
   createLabel,
+  updateLabel,
+  updateLabelRule,
   createLabelRule,
   deleteInstance,
   deleteLabel,
@@ -496,10 +498,21 @@ export const appRouter = router({
     }),
 
     create: protectedProcedure
-      .input(z.object({ name: z.string().min(1).max(64), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) }))
+      .input(z.object({ name: z.string().trim().min(1).max(64), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) }))
       .mutation(async ({ input }) => {
         const id = await createLabel({ userId: OWNER_ID, name: input.name, color: input.color });
         return { id };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().trim().min(1).max(64).optional(),
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await updateLabel(input.id, OWNER_ID, { name: input.name, color: input.color });
+        return { success: true };
       }),
 
     delete: protectedProcedure
@@ -532,6 +545,22 @@ export const appRouter = router({
           matchType: input.matchType ?? "contains",
         });
         return { id };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        labelId: z.number().optional(),
+        keyword: z.string().trim().min(1).max(256).optional(),
+        matchType: z.enum(["contains", "starts_with", "exact"]).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await updateLabelRule(input.id, OWNER_ID, {
+          labelId: input.labelId,
+          keyword: input.keyword,
+          matchType: input.matchType,
+        });
+        return { success: true };
       }),
 
     delete: protectedProcedure
