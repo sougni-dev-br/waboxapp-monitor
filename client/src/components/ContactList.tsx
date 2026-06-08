@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { InstanceDetailPanel } from "./InstanceDetailPanel";
 import { FilterBar } from "./FilterBar";
+import { ContactLabelsEditor } from "./ContactLabelsEditor";
 import { formatPhoneUid } from "@/lib/formatPhone";
 
 interface Instance {
@@ -154,10 +155,13 @@ function ContactItem({ contact, onClick }: { contact: Contact; onClick: () => vo
   const Icon = contact.type === "group" ? Users : User;
   const msgLabel = contact.messageCount === 1 ? "msg" : "msgs";
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
       title={`${contact.name ? `${contact.name} · ` : ""}${contact.uid}`}
-      className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left"
+      className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left cursor-pointer"
     >
       <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
         <Icon className="w-4 h-4 text-gray-400" />
@@ -185,33 +189,26 @@ function ContactItem({ contact, onClick }: { contact: Contact; onClick: () => vo
               </span>
             </>
           )}
-          {/* Exibe múltiplos labels se disponível, fallback para labelName legado */}
-          {(contact.labels && contact.labels.length > 0) ? (
-            contact.labels.map((lbl) => (
-              <span key={lbl.id} className="flex items-center gap-0.5">
-                <span className="text-gray-200">·</span>
-                <span
-                  className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
-                  style={{ backgroundColor: lbl.color }}
-                >
-                  {lbl.name}
-                </span>
-              </span>
-            ))
-          ) : (contact.labelName && contact.labelColor) ? (
-            <>
-              <span className="text-gray-200">·</span>
-              <span
-                className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
-                style={{ backgroundColor: contact.labelColor }}
-              >
-                {contact.labelName}
-              </span>
-            </>
-          ) : null}
+          {/* Marcadores aplicados + botão "+ Marcar" para multi-select */}
+          <span className="text-gray-200">·</span>
+          {(() => {
+            const applied =
+              contact.labels && contact.labels.length > 0
+                ? contact.labels
+                : contact.labelName && contact.labelColor && contact.labelId
+                ? [{ id: contact.labelId, name: contact.labelName, color: contact.labelColor }]
+                : [];
+            return (
+              <ContactLabelsEditor
+                contactId={contact.id}
+                appliedLabels={applied}
+                compact={applied.length === 0}
+              />
+            );
+          })()}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 

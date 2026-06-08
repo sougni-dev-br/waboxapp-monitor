@@ -10,6 +10,13 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatPhoneUid } from "@/lib/formatPhone";
 import { useDateRange } from "@/contexts/DateRangeContext";
+import { ContactLabelsEditor } from "./ContactLabelsEditor";
+
+interface ContactLabelItem {
+  id: number;
+  name: string;
+  color: string;
+}
 
 interface Contact {
   id: number;
@@ -22,6 +29,7 @@ interface Contact {
   labelId?: number | null;
   labelName?: string | null;
   labelColor?: string | null;
+  labels?: ContactLabelItem[];
   instanceId: number;
   instanceAlias?: string | null;
   instanceUid?: string | null;
@@ -217,9 +225,12 @@ function GlobalContactItem({ contact, onClick }: { contact: Contact; onClick: ()
   const instanceLabel = contact.instanceAlias || contact.instanceUid || `#${contact.instanceId}`;
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 transition-colors text-left"
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      className="w-full flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 transition-colors text-left cursor-pointer"
     >
       <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
         <Icon className="w-4 h-4 text-gray-400" />
@@ -251,20 +262,26 @@ function GlobalContactItem({ contact, onClick }: { contact: Contact; onClick: ()
               </span>
             </>
           )}
-          {contact.labelName && contact.labelColor && (
-            <>
-              <span className="text-gray-200">·</span>
-              <span
-                className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
-                style={{ backgroundColor: contact.labelColor }}
-              >
-                {contact.labelName}
-              </span>
-            </>
-          )}
+          {/* Marcadores aplicados + botão "+ Marcar" para multi-select */}
+          <span className="text-gray-200">·</span>
+          {(() => {
+            const applied =
+              contact.labels && contact.labels.length > 0
+                ? contact.labels
+                : contact.labelName && contact.labelColor && contact.labelId
+                ? [{ id: contact.labelId, name: contact.labelName, color: contact.labelColor }]
+                : [];
+            return (
+              <ContactLabelsEditor
+                contactId={contact.id}
+                appliedLabels={applied}
+                compact={applied.length === 0}
+              />
+            );
+          })()}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 

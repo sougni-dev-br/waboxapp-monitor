@@ -1229,6 +1229,29 @@ export async function getContactLabels(
     .where(eq(contactLabels.contactId, contactId));
 }
 
+/**
+ * Substitui ATOMICAMENTE o conjunto de marcadores de um contato.
+ * Usado pela UI manual de aplicar/remover marcadores (multi-select).
+ *
+ * Apaga tudo de contact_labels do contato e re-insere apenas os labelIds dados.
+ * Também sincroniza o legacy contacts.labelId (1º label ou null).
+ */
+export async function setContactLabels(contactId: number, labelIds: number[]): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const uniq = Array.from(new Set(labelIds.filter((n) => Number.isFinite(n))));
+
+  await db.delete(contactLabels).where(eq(contactLabels.contactId, contactId));
+  if (uniq.length > 0) {
+    await db.insert(contactLabels).values(uniq.map((labelId) => ({ contactId, labelId })));
+  }
+  // Mantém o legacy contacts.labelId em sincronia (1º label, ou null se vazio)
+  await db
+    .update(contacts)
+    .set({ labelId: uniq[0] ?? null })
+    .where(eq(contacts.id, contactId));
+}
+
 export async function getContactsWithoutLabel(
   instanceIds: number[],
   since: Date

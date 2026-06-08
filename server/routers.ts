@@ -674,6 +674,52 @@ export const appRouter = router({
         );
         return enriched;
       }),
+
+    /**
+     * Substitui o conjunto de marcadores de um contato (multi-select).
+     * Aceita 0..N labelIds; valida que o contato pertence ao usuário.
+     */
+    setLabels: protectedProcedure
+      .input(z.object({
+        contactId: z.number(),
+        labelIds: z.array(z.number()).max(64),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+
+        const { contacts: contactsTable } = await import("../drizzle/schema");
+        const { eq, inArray } = await import("drizzle-orm");
+
+        // Garante ownership: contato pertence a uma instância do usuário
+        const userInstances = await getInstances(OWNER_ID);
+        const ownedInstanceIds = userInstances.map((i) => i.id);
+        if (ownedInstanceIds.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contato não encontrado." });
+        }
+        const [row] = await db
+          .select({ id: contactsTable.id, instanceId: contactsTable.instanceId })
+          .from(contactsTable)
+          .where(eq(contactsTable.id, input.contactId));
+        if (!row || !ownedInstanceIds.includes(row.instanceId)) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contato não encontrado." });
+        }
+
+        // Valida que todos labelIds são do usuário
+        if (input.labelIds.length > 0) {
+          const ownedLabels = await getLabels(OWNER_ID);
+          const ownedLabelIds = new Set(ownedLabels.map((l) => l.id));
+          for (const lid of input.labelIds) {
+            if (!ownedLabelIds.has(lid)) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "Marcador inválido." });
+            }
+          }
+        }
+
+        const { setContactLabels } = await import("./db");
+        await setContactLabels(input.contactId, input.labelIds);
+        return { success: true, count: input.labelIds.length };
+      }),
   }),
 
   // ─── Dashboard ────────────────────────────────────────────────
