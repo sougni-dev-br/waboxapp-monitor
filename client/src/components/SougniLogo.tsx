@@ -1,53 +1,53 @@
 /**
- * Logo da marca Sougni — usado no header, login, modais.
+ * Logo da marca Sougni — usado no header, login, modais, favicon.
+ *
+ * Visual: hexágono lime + cubo isométrico preto wireframe.
+ * Animação CSS sutil (float vertical + pulse leve) — sem GIF, sem JS,
+ * suave e leve.
+ *
+ * Asset: `client/public/sougni-mark.jpg` (servido na raiz do site).
  *
  * Variantes:
- *  - mark: só o ícone (quadrado lime com s)
- *  - wordmark: só o nome "sougni"
- *  - full: ícone + nome (padrão)
+ *   - mark:     só o ícone (hexágono animado)
+ *   - wordmark: só o nome "sougni"
+ *   - full:     ícone + nome (padrão)
  */
 
 interface SougniLogoProps {
   variant?: "mark" | "wordmark" | "full";
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
+  /** Desliga animação (útil em locais menores) */
+  static?: boolean;
+  alt?: string;
 }
 
-export function SougniLogo({ variant = "full", size = "md", className = "" }: SougniLogoProps) {
-  const sizes = {
-    sm: { mark: 22, wordmark: "text-sm", gap: "gap-1.5" },
-    md: { mark: 28, wordmark: "text-base", gap: "gap-2" },
-    lg: { mark: 36, wordmark: "text-xl", gap: "gap-2.5" },
-    xl: { mark: 48, wordmark: "text-3xl", gap: "gap-3" },
-  } as const;
+const SIZES = {
+  sm: { mark: 24, wordmark: "text-sm", gap: "gap-1.5" },
+  md: { mark: 32, wordmark: "text-base", gap: "gap-2" },
+  lg: { mark: 44, wordmark: "text-xl", gap: "gap-2.5" },
+  xl: { mark: 64, wordmark: "text-3xl", gap: "gap-3" },
+} as const;
 
-  const s = sizes[size];
+export function SougniLogo({
+  variant = "full",
+  size = "md",
+  className = "",
+  static: isStatic = false,
+  alt = "Sougni",
+}: SougniLogoProps) {
+  const s = SIZES[size];
 
   const Mark = (
-    <span
-      className="inline-flex items-center justify-center rounded-lg flex-shrink-0"
-      style={{
-        width: s.mark,
-        height: s.mark,
-        background: "var(--sougni-lime)",
-        border: "1px solid var(--sougni-lime-dim)",
-      }}
-      aria-label="Sougni"
-    >
-      <span
-        className="sougni-wordmark"
-        style={{
-          fontSize: s.mark * 0.55,
-          lineHeight: 1,
-          fontWeight: 700,
-          color: "var(--sougni-ink)",
-          letterSpacing: "-0.04em",
-          marginTop: 1,
-        }}
-      >
-        s
-      </span>
-    </span>
+    <img
+      src="/sougni-mark.jpg"
+      alt={alt}
+      width={s.mark}
+      height={s.mark}
+      draggable={false}
+      className={`flex-shrink-0 select-none rounded-lg ${isStatic ? "" : "sougni-mark-anim"}`}
+      style={{ width: s.mark, height: s.mark, objectFit: "contain" }}
+    />
   );
 
   const Wordmark = (

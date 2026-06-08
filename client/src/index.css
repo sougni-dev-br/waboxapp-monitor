@@ -272,6 +272,20 @@
     color: var(--sougni-ink);
   }
 
+  /* Animação sutil do logo — float + pulse leve.
+     Respeita prefers-reduced-motion. */
+  @keyframes sougni-float {
+    0%, 100% { transform: translateY(-1px) scale(1); }
+    50%      { transform: translateY(1px) scale(1.03); }
+  }
+  .sougni-mark-anim {
+    animation: sougni-float 5.5s ease-in-out infinite;
+    will-change: transform;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sougni-mark-anim { animation: none; }
+  }
+
   /* Botão primário com lime hover */
   .btn-primary {
     background: var(--sougni-ink);
