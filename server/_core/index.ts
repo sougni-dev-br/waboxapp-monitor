@@ -239,22 +239,25 @@ async function startServer() {
           dtm: msgDtm,
         });
 
-        // Engine de marcadores: verificar as 4 primeiras mensagens recebidas
+        // Engine de marcadores: verifica as 4 primeiras mensagens recebidas e
+        // ACUMULA todos os labels cujas regras casarem.
+        //
+        // ⚠ NÃO usar `contactHasLabel` como early-return aqui: isso impede que
+        // um contato receba múltiplos marcadores (ex.: "saudação" + "interesse
+        // em preço" + "objeção sobre prazo"). applyLabelsToContact é idempotente
+        // (onConflictDoNothing), então reprocessar é seguro.
         if (msgDir === "i") {
-          const hasLabel = await contactHasLabel(contactId);
-          if (!hasLabel) {
-            const inboundCount = await getInboundMessageCount(contactId);
-            if (inboundCount <= 4) {
-              const firstMessages = await getFirstInboundMessages(contactId, 4);
-              const messageTexts = firstMessages.map((msg) => {
-                const body = msg.body as { text?: string } | null;
-                return typeof body?.text === "string" ? body.text : "";
-              });
-              const labelIds = await matchAllLabelsForMessages(userId, messageTexts);
-              if (labelIds.length > 0) {
-                await applyLabelsToContact(contactId, labelIds);
-                console.log("[Webhook] Labels applied:", labelIds, "to contact:", contactId);
-              }
+          const inboundCount = await getInboundMessageCount(contactId);
+          if (inboundCount <= 4) {
+            const firstMessages = await getFirstInboundMessages(contactId, 4);
+            const messageTexts = firstMessages.map((msg) => {
+              const body = msg.body as { text?: string } | null;
+              return typeof body?.text === "string" ? body.text : "";
+            });
+            const labelIds = await matchAllLabelsForMessages(userId, messageTexts);
+            if (labelIds.length > 0) {
+              await applyLabelsToContact(contactId, labelIds);
+              console.log("[Webhook] Labels applied:", labelIds, "to contact:", contactId);
             }
           }
         }

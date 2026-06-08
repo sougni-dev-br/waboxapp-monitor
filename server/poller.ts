@@ -27,7 +27,9 @@ async function pollUser(user: { id: number }): Promise<void> {
         const prevStatus = instance.status;
 
         await updateInstanceStatus(instance.id, newStatus, {
-          alias: result.alias ?? instance.alias,
+          // Preserva o alias local (que o usuário pode ter renomeado via UI).
+          // Só usa o do WaboxApp como fallback quando ainda não temos nenhum.
+          alias: instance.alias ?? result.alias,
           platform: result.platform ?? instance.platform,
           battery: result.battery ? parseInt(result.battery, 10) : instance.battery,
           plugged: result.plugged !== undefined ? result.plugged === "1" : instance.plugged,
