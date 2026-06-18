@@ -287,8 +287,40 @@ export interface InvestmentSummary {
   dailyByChannel: Array<{ date: string; google: number; meta: number; other: number }>;
 }
 
+/**
+ * Converte as MediaRow da NUCLEO (planilha por hospital×procedimento, com
+ * canal Google e Meta em linhas alternadas) no formato CustoRow agnóstico
+ * que `getInvestmentSummary` agrega. Essa é a fonte primária desde 2026-06.
+ *
+ * A planilha "WABOX 2.0 - DATA / CUSTOS" original (lida por `fetchCustos`)
+ * só carrega Google e é mantida como fallback.
+ */
+async function fetchCustosFromMediaCore(): Promise<CustoRow[]> {
+  const { getMediaRows } = await import("./mediaInvestment");
+  const media = await getMediaRows();
+  return media.map((r): CustoRow => {
+    const d = r.date;
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return {
+      date: dateStr,
+      channel: normalizeChannel(r.channel),
+      channelRaw: r.channel || "—",
+      // Sem coluna campanha na NUCLEO — usamos hospital+procedimento como rótulo.
+      campaign: r.procedure ? `${r.hospital} · ${r.procedure}` : (r.hospital || "—"),
+      hospital: normalizeHospital(r.hospital),
+      cost: Number.isFinite(r.cost) ? r.cost : 0,
+      note: "",
+    };
+  });
+}
+
 export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string } = {}): Promise<InvestmentSummary> {
-  const rows = await fetchCustos();
+  // Fonte primária: planilha NUCLEO (Google + Meta + outros, com canal por linha).
+  // Fallback: planilha WABOX 2.0 - DATA / CUSTOS (legacy, apenas Google).
+  let rows: CustoRow[] | null = await fetchCustosFromMediaCore();
+  if (!rows || rows.length === 0) {
+    rows = await fetchCustos();
+  }
   const emptyChannels = { google: 0, meta: 0, other: 0 };
   if (rows === null) {
     return {
