@@ -225,6 +225,10 @@ interface InvestmentPayload {
   byCampaign: { key: string; total: number; rows: number }[];
   byHospital: { key: string; total: number; rows: number }[];
   daily: { date: string; cost: number }[];
+  /** Totais por canal canônico — alimentam os KPI cards Google/Meta. */
+  channels: { google: number; meta: number; other: number };
+  /** Série diária stacked por canal. */
+  dailyByChannel: Array<{ date: string; google: number; meta: number; other: number }>;
 }
 
 function InvestmentSection({
@@ -253,14 +257,17 @@ function InvestmentSection({
   }
 
   const cpl = leads > 0 ? data.total / leads : null;
-  const topChannel = data.byChannel[0];
   const topCampaign = data.byCampaign[0];
   const topHospital = data.byHospital[0];
+  const ch = data.channels ?? { google: 0, meta: 0, other: 0 };
+  const totalForShare = data.total || 1;
+  const googleShare = (ch.google / totalForShare) * 100;
+  const metaShare = (ch.meta / totalForShare) * 100;
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPIs — quebra Total / Google / Meta / CPL */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KPICard
           label="Investimento total"
           value={fmtMoney(data.total)}
@@ -269,18 +276,25 @@ function InvestmentSection({
           icon={Wallet}
         />
         <KPICard
+          label="Google Ads"
+          value={fmtMoney(ch.google)}
+          hint={ch.google > 0 ? `${googleShare.toFixed(0)}% do total` : "Sem lançamentos"}
+          accent="bg-amber-50"
+          icon={TrendingUp}
+        />
+        <KPICard
+          label="Meta Ads"
+          value={fmtMoney(ch.meta)}
+          hint={ch.meta > 0 ? `${metaShare.toFixed(0)}% do total` : "Sem lançamentos"}
+          accent="bg-blue-50"
+          icon={TrendingUp}
+        />
+        <KPICard
           label="CPL (Custo por Lead)"
           value={cpl != null ? fmtMoney(cpl, 2) : "—"}
           hint={leads > 0 ? `${fmtNum(leads)} leads no período` : "Sem leads ainda"}
           accent="bg-emerald-50"
           icon={Target}
-        />
-        <KPICard
-          label="Canal #1"
-          value={topChannel?.key ?? "—"}
-          hint={topChannel ? fmtMoney(topChannel.total) : ""}
-          accent="bg-blue-50"
-          icon={TrendingUp}
         />
         <KPICard
           label="Hospital #1"
@@ -303,13 +317,13 @@ function InvestmentSection({
         full
       />
 
-      {/* Série diária */}
+      {/* Série diária — stacked por canal (Google/Meta/Outros) */}
       {data.daily.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
-                Investimento diário
+                Investimento diário por canal
               </p>
               <p className="text-sm text-gray-900 font-semibold">
                 {data.daily.length} {data.daily.length === 1 ? "dia" : "dias"} com lançamentos
@@ -320,7 +334,7 @@ function InvestmentSection({
             </p>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data.daily}>
+            <BarChart data={(data.dailyByChannel?.length ? data.dailyByChannel : data.daily.map((d) => ({ date: d.date, google: d.cost, meta: 0, other: 0 })))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -333,13 +347,20 @@ function InvestmentSection({
                 tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
               />
               <RTooltip
-                formatter={(v: number) => [fmtMoney(v), "Custo"]}
+                formatter={(v: number, name: string) => [fmtMoney(v), name === "google" ? "Google" : name === "meta" ? "Meta" : "Outros"]}
                 labelFormatter={(l) => fmtDayShort(String(l))}
                 contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
               />
-              <Bar dataKey="cost" fill="#11131F" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="google" stackId="ch" fill="#F59E0B" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="meta"   stackId="ch" fill="#3B82F6" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="other"  stackId="ch" fill="#94A3B8" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          <div className="flex items-center gap-4 mt-3 text-[11px] text-gray-500">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B]" />Google</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]" />Meta</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#94A3B8]" />Outros</span>
+          </div>
         </div>
       )}
 

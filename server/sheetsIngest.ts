@@ -13,11 +13,42 @@
 export interface CustoRow {
   /** Date in YYYY-MM-DD (parsed from BR or ISO formats). */
   date: string;
+  /** Canal normalizado: GOOGLE | META | TIKTOK | LINKEDIN | OUTRO */
   channel: string;
+  /** Texto cru do canal na planilha (pra exibir caso seja "OUTRO") */
+  channelRaw: string;
   campaign: string;
   hospital: string;
   cost: number;
   note: string;
+}
+
+/**
+ * Canoniza o nome do canal de mídia. Aceita variações comuns:
+ *   - GOOGLE, GOOGLE ADS, GOOGLEADS, ADWORDS  → "GOOGLE"
+ *   - META, FACEBOOK, FB, INSTAGRAM, IG, META ADS → "META"
+ *   - TIKTOK, TIK TOK → "TIKTOK"
+ *   - LINKEDIN, LINKED IN → "LINKEDIN"
+ *   - resto → string normalizada em uppercase
+ *
+ * Importante: para Meta, agrupamos Facebook/Instagram/FB Ads sob "META" porque
+ * o gerenciador é o mesmo (Meta Business Suite); separar não traz visibilidade
+ * útil no dashboard, só fragmenta o gráfico.
+ */
+export function normalizeChannel(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const s = String(raw).trim();
+  if (!s) return "—";
+  const u = s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\s._\-]/g, "");
+  if (u.includes("GOOGLE") || u.includes("ADWORDS")) return "GOOGLE";
+  if (u.includes("META") || u.includes("FACEBOOK") || u === "FB" || u.includes("FBADS") || u.includes("INSTAGRAM") || u === "IG") return "META";
+  if (u.includes("TIKTOK")) return "TIKTOK";
+  if (u.includes("LINKEDIN")) return "LINKEDIN";
+  return s.toUpperCase();
 }
 
 const CACHE_TTL_MS = 60_000;
@@ -194,9 +225,11 @@ export async function fetchCustos(): Promise<CustoRow[] | null> {
     if (!date) continue;
     const cost = parseMoney(r[idx.cost] ?? "");
     if (cost === 0 && !r[idx.note]) continue;
+    const channelRaw = (r[idx.channel] ?? "").trim();
     rows.push({
       date,
-      channel: (r[idx.channel] ?? "").trim() || "—",
+      channel: normalizeChannel(channelRaw),
+      channelRaw: channelRaw || "—",
       campaign: (r[idx.campaign] ?? "").trim() || "—",
       hospital: normalizeHospital(r[idx.hospital]),
       cost,
@@ -241,10 +274,22 @@ export interface InvestmentSummary {
   byHospital: AggBucket[];
   /** série diária ordenada cronologicamente */
   daily: { date: string; cost: number }[];
+  /**
+   * Totais por canal canônico — atalho pros KPI cards do dashboard sem ter
+   * que iterar `byChannel`. Sempre presentes (0 quando não houver lançamento).
+   */
+  channels: {
+    google: number;
+    meta: number;
+    other: number;
+  };
+  /** Série diária quebrada por canal canônico, pra gráfico stacked. */
+  dailyByChannel: Array<{ date: string; google: number; meta: number; other: number }>;
 }
 
 export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string } = {}): Promise<InvestmentSummary> {
   const rows = await fetchCustos();
+  const emptyChannels = { google: 0, meta: 0, other: 0 };
   if (rows === null) {
     return {
       total: 0,
@@ -255,6 +300,8 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
       byCampaign: [],
       byHospital: [],
       daily: [],
+      channels: emptyChannels,
+      dailyByChannel: [],
     };
   }
   const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
@@ -269,6 +316,22 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
   const daily = Array.from(dailyMap.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([date, cost]) => ({ date, cost }));
+
+  // Totais por canal canônico e série diária stacked
+  const channels = { google: 0, meta: 0, other: 0 };
+  const dailyByChMap = new Map<string, { google: number; meta: number; other: number }>();
+  for (const r of scoped) {
+    const bucket: "google" | "meta" | "other" =
+      r.channel === "GOOGLE" ? "google" : r.channel === "META" ? "meta" : "other";
+    channels[bucket] += r.cost;
+    const e = dailyByChMap.get(r.date) ?? { google: 0, meta: 0, other: 0 };
+    e[bucket] += r.cost;
+    dailyByChMap.set(r.date, e);
+  }
+  const dailyByChannel = Array.from(dailyByChMap.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, v]) => ({ date, ...v }));
+
   return {
     total,
     lines: scoped.length,
@@ -278,6 +341,8 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
     byCampaign: aggBy(scoped, (r) => r.campaign),
     byHospital: aggBy(scoped, (r) => r.hospital),
     daily,
+    channels,
+    dailyByChannel,
   };
 }
 

@@ -350,7 +350,7 @@ Built-in do template `_core/systemRouter`. Queries pequenas de health.
 |---|---|---|---|
 | **WaboxApp API** | `https://www.waboxapp.com/api` | `server/waboxapp.ts` (`checkInstanceStatus`, `sendTextMessage`, `setHookUrl`) | token query/body |
 | **Postgres** | (Render internal) | `server/db.ts` | `DATABASE_URL` |
-| **Google Sheets** — CUSTOS | `docs.google.com/spreadsheets/.../pub?output=csv` | `server/sheetsIngest.ts` | público |
+| **Google Sheets** — CUSTOS (Google + Meta) | `docs.google.com/spreadsheets/.../pub?output=csv` | `server/sheetsIngest.ts` (com `normalizeChannel`) | público |
 | **Google Sheets** — PIPELINE | idem | `server/sheetsIngest.ts` | público |
 | **Google Sheets** — Mídia (9 abas) | `pub?gid=N&output=csv` | `server/mediaInvestment.ts` | público |
 | **Reportei** | iframe externo | `client/src/components/MidiaOnView.tsx` | sessão do user no Reportei |
