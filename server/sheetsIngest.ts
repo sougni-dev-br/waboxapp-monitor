@@ -51,24 +51,49 @@ export function normalizeChannel(raw: string | null | undefined): string {
   return s.toUpperCase();
 }
 
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 5 * 60_000; // 5 min — alinhado ao polling do frontend
+const FETCH_TIMEOUT_MS = 8_000;
 const cache = new Map<string, { fetchedAt: number; text: string }>();
+// Dedup de requests em voo por URL — evita thundering herd no cache-miss.
+const inflight = new Map<string, Promise<string | null>>();
 
 async function fetchCsvText(url: string): Promise<string | null> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.text;
-  try {
-    const res = await fetch(url, { headers: { Accept: "text/csv,text/plain" } });
-    if (!res.ok) {
-      console.warn(`[sheetsIngest] HTTP ${res.status} ao buscar ${url}`);
+
+  // Se já existe um fetch em voo pra essa URL, reaproveita o mesmo Promise.
+  const existing = inflight.get(url);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<string | null> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "text/csv,text/plain" },
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        console.warn(`[sheetsIngest] HTTP ${res.status} ao buscar ${url}`);
+        return cached?.text ?? null;
+      }
+      const text = await res.text();
+      cache.set(url, { fetchedAt: Date.now(), text });
+      return text;
+    } catch (err) {
+      // Inclui AbortError (timeout de 8s) — cai no cache stale.
+      console.error("[sheetsIngest] erro/timeout fetch:", err);
       return cached?.text ?? null;
+    } finally {
+      clearTimeout(timer);
     }
-    const text = await res.text();
-    cache.set(url, { fetchedAt: Date.now(), text });
-    return text;
-  } catch (err) {
-    console.error("[sheetsIngest] erro fetch:", err);
-    return cached?.text ?? null;
+  })();
+
+  inflight.set(url, promise);
+  try {
+    return await promise;
+  } finally {
+    inflight.delete(url);
   }
 }
 

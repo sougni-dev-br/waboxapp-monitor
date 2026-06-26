@@ -38,6 +38,7 @@ const SHEETS = [
 ];
 
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
+const FETCH_TIMEOUT_MS = 8_000;
 let _cache: { rows: MediaRow[]; ts: number } | null = null;
 let _inflight: Promise<MediaRow[]> | null = null;
 
@@ -100,12 +101,24 @@ function parseCSV(text: string): string[][] {
 
 async function fetchSheet(gid: string): Promise<MediaRow[]> {
   const url = `https://docs.google.com/spreadsheets/d/e/${PUB_ID}/pub?gid=${gid}&single=true&output=csv`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.warn(`[mediaInvestment] fetch gid=${gid} returned ${res.status}`);
-    return [];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let csv: string;
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      console.warn(`[mediaInvestment] fetch gid=${gid} returned ${res.status}`);
+      return [];
+    }
+    csv = await res.text();
+  } catch (err) {
+    // Inclui AbortError (timeout de 8s) — propaga pra getMediaRows cair no
+    // cache stale (_cache?.rows) via o catch de fetchAllSheets/getMediaRows.
+    console.error(`[mediaInvestment] erro/timeout fetch gid=${gid}:`, err);
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  const csv = await res.text();
   const rows = parseCSV(csv);
   if (rows.length < 2) return [];
   // Header esperado: DATA, IMPRESSOES, CLIQUES, CTR, CUSTO, CPC, PROCEDIMENTO, HOSPITAL, CANAL
