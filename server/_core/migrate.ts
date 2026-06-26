@@ -57,7 +57,28 @@ export async function ensureAuthSchema(): Promise<void> {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS "automation_rules_userId_idx" ON "automation_rules" ("userId")`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS "automation_rules_trigger_idx" ON "automation_rules" ("trigger")`);
 
-    console.log("[migrate] Schema de auth + automation verificado");
+    // 4. Tabela units (unidades/hospitais) + seed idempotente das 5 unidades atuais
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "units" (
+        "id" serial PRIMARY KEY,
+        "name" varchar(64) NOT NULL,
+        "label" varchar(128) NOT NULL,
+        "active" boolean DEFAULT true NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "units_name_unique" ON "units" ("name")`);
+    await db.execute(sql`
+      INSERT INTO "units" ("name", "label") VALUES
+        ('HOLHOS', 'H.Olhos'),
+        ('HOPE', 'Hope'),
+        ('CBV', 'CBV'),
+        ('CRV', 'CRV'),
+        ('SANTA LUZIA', 'Santa Luzia')
+      ON CONFLICT ("name") DO NOTHING
+    `);
+
+    console.log("[migrate] Schema de auth + automation + units verificado");
   } catch (err) {
     console.error("[migrate] Falha ao aplicar ensureAuthSchema:", err);
     throw err;

@@ -281,3 +281,27 @@ export const automationRules = pgTable(
 
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type InsertAutomationRule = typeof automationRules.$inferInsert;
+
+// ─── units (unidades/hospitais) ────────────────────────────────────────────────
+//
+// Fonte de verdade das unidades. Substitui a lista hardcoded `HOSPITALS`.
+// `name` é o slug canônico referenciado em `instances.hospital` e
+// `users.allowedHospitals`; `label` é o nome amigável exibido na UI.
+export const units = pgTable(
+  "units",
+  {
+    id: serial("id").primaryKey(),
+    /** Slug canônico (uppercase). Ex.: "HOPE". Referenciado por instances/users. */
+    name: varchar("name", { length: 64 }).notNull(),
+    /** Nome amigável exibido na UI. Ex.: "Hope". */
+    label: varchar("label", { length: 128 }).notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (t) => ({
+    nameUnique: uniqueIndex("units_name_unique").on(t.name),
+  })
+);
+
+export type Unit = typeof units.$inferSelect;
+export type InsertUnit = typeof units.$inferInsert;

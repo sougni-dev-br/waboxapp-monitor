@@ -2,7 +2,7 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { X, Smartphone, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { HOSPITALS, type Hospital } from "@/lib/hospitals";
+import { FALLBACK_UNIT_OPTIONS } from "@/lib/hospitals";
 
 interface AddInstanceModalProps {
   onClose: () => void;
@@ -12,7 +12,9 @@ interface AddInstanceModalProps {
 export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
   const [uid, setUid] = useState("");
   const [alias, setAlias] = useState("");
-  const [hospital, setHospital] = useState<Hospital | "">("");
+  const [hospital, setHospital] = useState<string>("");
+  const { data: units } = trpc.units.listActive.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const unitOptions = units && units.length ? units : FALLBACK_UNIT_OPTIONS;
 
   const addMutation = trpc.instances.add.useMutation({
     onSuccess: (data) => {
@@ -95,12 +97,12 @@ export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
             </label>
             <select
               value={hospital}
-              onChange={(e) => setHospital(e.target.value as Hospital | "")}
+              onChange={(e) => setHospital(e.target.value)}
               className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 transition-colors bg-white"
             >
               <option value="">Derivar do nome do canal</option>
-              {HOSPITALS.map((h) => (
-                <option key={h} value={h}>{h}</option>
+              {unitOptions.map((u) => (
+                <option key={u.name} value={u.name}>{u.label}</option>
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-1">

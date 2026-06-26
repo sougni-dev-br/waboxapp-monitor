@@ -28,6 +28,12 @@ import {
   getInstanceByUid,
   getInstances,
   getVisibleInstances,
+  getUnits,
+  getActiveUnits,
+  createUnit,
+  updateUnit,
+  deleteUnit,
+  getUnitLinkCounts,
   getLabelRules,
   getLabels,
   getLeadsWithAggregatedText,
@@ -45,7 +51,7 @@ import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 import { findUserByUsername, verifyPassword, touchLastSignedIn, hashPassword, PERMISSIONS } from "./auth";
 import { getInvestmentSummary, getPipelineSummary } from "./sheetsIngest";
-import { HOSPITALS, instanceHospital } from "./hospitalUtils";
+import { HOSPITALS, instanceHospital, getHospitalNames } from "./hospitalUtils";
 
 // ID fixo do painel (dono dos dados — instâncias/contatos/mensagens)
 const OWNER_ID = 1;
@@ -84,6 +90,27 @@ function clampHospital(input: string | undefined, allowed: string[] | null): str
   if (!allowed || allowed.length === 0) return input;     // sem restrição
   if (input && allowed.includes(input)) return input;     // escolha válida
   return undefined; // escolha inválida/ausente → backend agrega só o permitido via instanceIds; sheets fica amplo mas sem dado cruzado relevante
+}
+
+/**
+ * Conjunto de nomes de unidades válidos. Fonte: tabela `units`; fallback para
+ * `HOSPITALS` enquanto o banco ainda não tem unidades cadastradas.
+ */
+async function validUnitNames(): Promise<Set<string>> {
+  const dbUnits = await getUnits();
+  const names = dbUnits.length ? dbUnits.map((u) => u.name) : [...HOSPITALS];
+  return new Set(names);
+}
+
+/** Valida que todos os nomes pertencem ao conjunto de unidades conhecidas. */
+async function assertKnownUnits(names: string[]): Promise<void> {
+  if (names.length === 0) return;
+  const known = await validUnitNames();
+  for (const n of names) {
+    if (!known.has(n)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Unidade inválida: ${n}` });
+    }
+  }
 }
 
 export const appRouter = router({
@@ -213,9 +240,10 @@ export const appRouter = router({
           name: z.string().trim().min(1).max(128),
           password: z.string().min(6, "Mínimo 6 caracteres").max(128),
           role: z.enum(["admin", "user"]).default("user"),
-          allowedHospitals: z.array(z.enum(HOSPITALS)).nullable().optional(),
+          allowedHospitals: z.array(z.string().trim().max(64)).nullable().optional(),
         }))
         .mutation(async ({ input }) => {
+          if (input.allowedHospitals?.length) await assertKnownUnits(input.allowedHospitals);
           const db = await import("./db").then((m) => m.getDb());
           if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
           const { users } = await import("../drizzle/schema");
@@ -246,10 +274,11 @@ export const appRouter = router({
           name: z.string().trim().min(1).max(128).optional(),
           role: z.enum(["admin", "user"]).optional(),
           active: z.boolean().optional(),
-          allowedHospitals: z.array(z.enum(HOSPITALS)).nullable().optional(),
+          allowedHospitals: z.array(z.string().trim().max(64)).nullable().optional(),
           password: z.string().min(6).max(128).optional(),
         }))
         .mutation(async ({ input }) => {
+          if (input.allowedHospitals?.length) await assertKnownUnits(input.allowedHospitals);
           const db = await import("./db").then((m) => m.getDb());
           if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
           const { users } = await import("../drizzle/schema");
@@ -344,6 +373,77 @@ export const appRouter = router({
     }),
   }),
 
+  // ─── Units (unidades/hospitais) ──────────────────────────────────────────────
+  // Fonte de verdade das unidades. Leitura para qualquer autenticado (user só
+  // enxerga as ativas); escrita só para admin.
+  units: router({
+    /** Admin vê todas (ativas + inativas); user vê só as ativas. */
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const all = await getUnits();
+      if (ctx.user.role === "admin") return all;
+      return all.filter((u) => u.active);
+    }),
+
+    /** Só unidades ativas — usado pelos selects de cadastro e pelo filtro. */
+    listActive: protectedProcedure.query(async () => {
+      return getActiveUnits();
+    }),
+
+    /** Contagem de instâncias vinculadas por unidade (para a UI de gestão). */
+    linkCounts: adminProcedure.query(async () => {
+      return getUnitLinkCounts();
+    }),
+
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().trim().min(1).max(64),
+        label: z.string().trim().min(1).max(128),
+      }))
+      .mutation(async ({ input }) => {
+        const name = input.name.toUpperCase().trim();
+        const existing = await getUnits();
+        if (existing.some((u) => u.name === name)) {
+          throw new TRPCError({ code: "CONFLICT", message: `Unidade '${name}' já existe.` });
+        }
+        const id = await createUnit(name, input.label.trim());
+        return { id, name };
+      }),
+
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().trim().min(1).max(64).optional(),
+        label: z.string().trim().min(1).max(128).optional(),
+        active: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const patch: { name?: string; label?: string; active?: boolean } = {};
+        if (input.name !== undefined) {
+          const name = input.name.toUpperCase().trim();
+          // Garante unicidade de name ao renomear
+          const existing = await getUnits();
+          if (existing.some((u) => u.name === name && u.id !== input.id)) {
+            throw new TRPCError({ code: "CONFLICT", message: `Unidade '${name}' já existe.` });
+          }
+          patch.name = name;
+        }
+        if (input.label !== undefined) patch.label = input.label.trim();
+        if (input.active !== undefined) patch.active = input.active;
+        await updateUnit(input.id, patch);
+        return { success: true };
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const res = await deleteUnit(input.id);
+        if (!res.ok) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: res.reason ?? "Não foi possível remover a unidade." });
+        }
+        return { success: true };
+      }),
+  }),
+
   // ─── Config ─────────────────────────────────────────────────────────────────
   config: router({
     get: protectedProcedure.query(async () => {
@@ -366,8 +466,9 @@ export const appRouter = router({
     }),
 
     add: protectedProcedure
-      .input(z.object({ uid: z.string().min(5), alias: z.string().optional(), hospital: z.enum(HOSPITALS).optional() }))
+      .input(z.object({ uid: z.string().min(5), alias: z.string().optional(), hospital: z.string().trim().max(64).optional() }))
       .mutation(async ({ input }) => {
+        if (input.hospital) await assertKnownUnits([input.hospital]);
         const config = await getApiConfig(OWNER_ID);
         if (!config?.token) {
           throw new TRPCError({
@@ -442,9 +543,10 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         alias: z.string().trim().min(1).max(128).optional(),
-        hospital: z.enum(HOSPITALS).nullable().optional(),
+        hospital: z.string().trim().max(64).nullable().optional(),
       }))
       .mutation(async ({ input }) => {
+        if (input.hospital) await assertKnownUnits([input.hospital]);
         const allInstances = await getInstances(OWNER_ID);
         const instance = allInstances.find((i) => i.id === input.id);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
@@ -948,6 +1050,10 @@ export const appRouter = router({
       const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
       const instanceIds = allInstances.map((i) => i.id);
 
+      // Nomes das unidades ativas (fonte de verdade no banco; fallback HOSPITALS)
+      const db = await import("./db").then((m) => m.getDb());
+      const hospitalNames = await getHospitalNames(db);
+
       const leads = await getLeadsWithAggregatedText(instanceIds);
 
       const REFRATIVA_REGEX =
@@ -983,7 +1089,7 @@ export const appRouter = router({
       return {
         total: out.length,
         countByHospital: Object.fromEntries(
-          HOSPITALS.map((h) => [h, out.filter((l) => l.hospital === h).length])
+          hospitalNames.map((h) => [h, out.filter((l) => l.hospital === h).length])
         ),
         countByProcedure: {
           Catarata: out.filter((l) => l.procedure === "Catarata").length,

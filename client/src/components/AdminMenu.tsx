@@ -3,15 +3,17 @@
  * Abre 2 modais: gerenciar usuários e regras de automação.
  */
 import { useState, useRef, useEffect } from "react";
-import { ShieldCheck, Users, Zap, ChevronDown } from "lucide-react";
+import { ShieldCheck, Users, Zap, ChevronDown, Building2 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { UsersManagerModal } from "./UsersManagerModal";
+import { UnitsManagerModal } from "./UnitsManagerModal";
 import { AutomationRulesModal } from "./AutomationRulesModal";
 
 export function AdminMenu() {
   const { isAdmin } = usePermissions();
   const [open, setOpen] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
+  const [showUnits, setShowUnits] = useState(false);
   const [showAutomation, setShowAutomation] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -79,10 +81,28 @@ export function AdminMenu() {
               </p>
             </div>
           </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setShowUnits(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
+          >
+            <div className="w-7 h-7 rounded-lg bg-[#DFFF00]/30 flex items-center justify-center">
+              <Building2 className="w-3.5 h-3.5 text-[#11131F]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium leading-tight">Unidades</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                Hospitais e clínicas
+              </p>
+            </div>
+          </button>
         </div>
       )}
 
       <UsersManagerModal open={showUsers} onClose={() => setShowUsers(false)} />
+      <UnitsManagerModal open={showUnits} onClose={() => setShowUnits(false)} />
       <AutomationRulesModal open={showAutomation} onClose={() => setShowAutomation(false)} />
     </div>
   );

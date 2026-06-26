@@ -23,6 +23,8 @@ import {
   labels,
   messages,
   statusLogs,
+  units,
+  Unit,
   users,
 } from "../drizzle/schema";
 import { instanceHospital } from "./hospitalUtils";
@@ -135,6 +137,73 @@ export async function getVisibleInstances(
   const all = await getInstances(userId);
   if (!allowedHospitals || allowedHospitals.length === 0) return all;
   return all.filter((i) => allowedHospitals.includes(instanceHospital(i)));
+}
+
+// ─── Units (unidades/hospitais) ────────────────────────────────────────────────
+
+export async function getUnits(): Promise<Unit[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(units).orderBy(units.name);
+}
+
+export async function getActiveUnits(): Promise<Unit[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(units).where(eq(units.active, true)).orderBy(units.name);
+}
+
+export async function createUnit(name: string, label: string): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const r = await db.insert(units).values({ name, label }).returning({ id: units.id });
+  return r[0].id;
+}
+
+export async function updateUnit(
+  id: number,
+  data: { name?: string; label?: string; active?: boolean },
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  if (Object.keys(data).length === 0) return;
+  await db.update(units).set(data).where(eq(units.id, id));
+}
+
+/**
+ * Deleta uma unidade — só permitido quando NENHUMA instância está vinculada a
+ * ela (instances.hospital == units.name). Retorna o motivo quando bloqueado.
+ */
+export async function deleteUnit(id: number): Promise<{ ok: boolean; reason?: string }> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "DB indisponível" };
+  const [unit] = await db.select().from(units).where(eq(units.id, id)).limit(1);
+  if (!unit) return { ok: false, reason: "Unidade não encontrada." };
+  const [linked] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(instances)
+    .where(eq(instances.hospital, unit.name));
+  const count = Number(linked?.count ?? 0);
+  if (count > 0) {
+    return { ok: false, reason: `${count} canal(is) vinculado(s) a esta unidade.` };
+  }
+  await db.delete(units).where(eq(units.id, id));
+  return { ok: true };
+}
+
+/** Conta instâncias vinculadas a cada unidade (por name). Para a UI de gestão. */
+export async function getUnitLinkCounts(): Promise<Record<string, number>> {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db
+    .select({ hospital: instances.hospital, count: sql<number>`COUNT(*)::int` })
+    .from(instances)
+    .groupBy(instances.hospital);
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.hospital) out[r.hospital] = Number(r.count);
+  }
+  return out;
 }
 
 export async function getInstanceById(id: number): Promise<Instance | undefined> {

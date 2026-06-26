@@ -5,7 +5,7 @@ import { useState } from "react";
 import { X, Plus, Trash2, Shield, User as UserIcon, Check, Pencil, Building2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { HOSPITALS, type Hospital } from "@/lib/hospitals";
+import { FALLBACK_UNIT_OPTIONS, type UnitOption } from "@/lib/hospitals";
 
 interface Props {
   open: boolean;
@@ -16,30 +16,33 @@ interface Props {
 function HospitalPicker({
   value,
   onChange,
+  options,
 }: {
-  value: Hospital[];
-  onChange: (next: Hospital[]) => void;
+  value: string[];
+  onChange: (next: string[]) => void;
+  options: UnitOption[];
 }) {
-  function toggle(h: Hospital) {
-    onChange(value.includes(h) ? value.filter((x) => x !== h) : [...value, h]);
+  function toggle(name: string) {
+    onChange(value.includes(name) ? value.filter((x) => x !== name) : [...value, name]);
   }
   return (
     <div>
       <div className="flex flex-wrap gap-1.5">
-        {HOSPITALS.map((h) => {
-          const active = value.includes(h);
+        {options.map((u) => {
+          const active = value.includes(u.name);
           return (
             <button
-              key={h}
+              key={u.name}
               type="button"
-              onClick={() => toggle(h)}
+              onClick={() => toggle(u.name)}
               className={`px-2.5 py-1 text-[11px] font-semibold rounded-md border transition-all ${
                 active
                   ? "bg-[#11131F] text-white border-[#11131F]"
-                  : "bg-background text-muted-foreground border-border hover:border-foreground/30"
+                  : `bg-background text-muted-foreground border-border hover:border-foreground/30 ${u.active ? "" : "opacity-60"}`
               }`}
+              title={u.active ? u.label : `${u.label} (inativa)`}
             >
-              {h}
+              {u.label}{!u.active && " ·"}
             </button>
           );
         })}
@@ -56,6 +59,9 @@ export function UsersManagerModal({ open, onClose }: Props) {
   const { data: users = [], refetch } = trpc.admin.users.list.useQuery(undefined, {
     enabled: open,
   });
+  // Admin vê todas as unidades (inclusive inativas) para poder (re)atribuir.
+  const { data: unitsData } = trpc.units.list.useQuery(undefined, { enabled: open });
+  const unitOptions = unitsData && unitsData.length ? unitsData : FALLBACK_UNIT_OPTIONS;
 
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
@@ -63,12 +69,12 @@ export function UsersManagerModal({ open, onClose }: Props) {
     name: "",
     password: "",
     role: "user" as "admin" | "user",
-    allowedHospitals: [] as Hospital[],
+    allowedHospitals: [] as string[],
   });
 
   // Edição inline de unidades/role de um usuário existente.
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<{ role: "admin" | "user"; allowedHospitals: Hospital[] }>({
+  const [editDraft, setEditDraft] = useState<{ role: "admin" | "user"; allowedHospitals: string[] }>({
     role: "user",
     allowedHospitals: [],
   });
@@ -117,7 +123,7 @@ export function UsersManagerModal({ open, onClose }: Props) {
     setEditingId(u.id);
     setEditDraft({
       role: u.role,
-      allowedHospitals: (u.allowedHospitals ?? []) as Hospital[],
+      allowedHospitals: u.allowedHospitals ?? [],
     });
   }
 
@@ -206,6 +212,7 @@ export function UsersManagerModal({ open, onClose }: Props) {
                   <HospitalPicker
                     value={form.allowedHospitals}
                     onChange={(next) => setForm({ ...form, allowedHospitals: next })}
+                    options={unitOptions}
                   />
                 </div>
               )}
@@ -329,6 +336,7 @@ export function UsersManagerModal({ open, onClose }: Props) {
                           <HospitalPicker
                             value={editDraft.allowedHospitals}
                             onChange={(next) => setEditDraft({ ...editDraft, allowedHospitals: next })}
+                            options={unitOptions}
                           />
                         </div>
                       )}

@@ -7,7 +7,7 @@ import { Pencil, X, Check } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { formatPhoneUid } from "@/lib/formatPhone";
-import { HOSPITALS, type Hospital } from "@/lib/hospitals";
+import { FALLBACK_UNIT_OPTIONS } from "@/lib/hospitals";
 
 interface InstanceAliasEditorProps {
   instance: { id: number; uid: string; alias?: string | null; hospital?: string | null };
@@ -18,7 +18,14 @@ interface InstanceAliasEditorProps {
 
 export function InstanceAliasEditor({ instance, open, onClose, onUpdated }: InstanceAliasEditorProps) {
   const [alias, setAlias] = useState(instance.alias ?? "");
-  const [hospital, setHospital] = useState<Hospital | "">((instance.hospital as Hospital) ?? "");
+  const [hospital, setHospital] = useState<string>(instance.hospital ?? "");
+  const { data: units } = trpc.units.listActive.useQuery(undefined, { staleTime: 5 * 60_000 });
+  const baseUnits = units && units.length ? units : FALLBACK_UNIT_OPTIONS;
+  // Garante que a unidade atual (mesmo inativa) continue selecionável.
+  const unitOptions =
+    instance.hospital && !baseUnits.some((u) => u.name === instance.hospital)
+      ? [...baseUnits, { id: -999, name: instance.hospital, label: `${instance.hospital} (inativa)`, active: false }]
+      : baseUnits;
   const utils = trpc.useUtils();
   const mutation = trpc.instances.update.useMutation({
     onSuccess: () => {
@@ -36,7 +43,7 @@ export function InstanceAliasEditor({ instance, open, onClose, onUpdated }: Inst
   useEffect(() => {
     if (open) {
       setAlias(instance.alias ?? "");
-      setHospital((instance.hospital as Hospital) ?? "");
+      setHospital(instance.hospital ?? "");
     }
   }, [open, instance.alias, instance.hospital]);
 
@@ -112,12 +119,12 @@ export function InstanceAliasEditor({ instance, open, onClose, onUpdated }: Inst
             <select
               id="hospital"
               value={hospital}
-              onChange={(e) => setHospital(e.target.value as Hospital | "")}
+              onChange={(e) => setHospital(e.target.value)}
               className="w-full h-10 px-3 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 focus:ring-2 focus:ring-[#DFFF00]/40"
             >
               <option value="">Derivar do nome do canal</option>
-              {HOSPITALS.map((h) => (
-                <option key={h} value={h}>{h}</option>
+              {unitOptions.map((u) => (
+                <option key={u.name} value={u.name}>{u.label}</option>
               ))}
             </select>
             <p className="text-[11px] text-muted-foreground mt-1">
