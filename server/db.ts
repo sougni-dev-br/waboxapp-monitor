@@ -849,6 +849,14 @@ export async function getDashboardOverview(
   const periodEnd = new Date(opts?.dateTo ?? now);
   periodEnd.setHours(23, 59, 59, 999);
 
+  // LOGS TEMP — instrumentação por bloco de query (revela qual trava).
+  let _t = Date.now();
+  const mark = (label: string) => {
+    const d = Date.now() - _t;
+    console.log(`[overview.sql] ${label}: ${d}ms`);
+    _t = Date.now();
+  };
+
   const [totalContactsRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(contacts).where(inArray(contacts.instanceId, instanceIds));
   const [todayRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(contacts).where(and(inArray(contacts.instanceId, instanceIds), gte(contacts.createdAt, startOfToday)));
   const [yesterdayRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(contacts).where(and(inArray(contacts.instanceId, instanceIds), gte(contacts.createdAt, startOfYesterday), lte(contacts.createdAt, endOfYesterday)));
@@ -857,6 +865,7 @@ export async function getDashboardOverview(
 
   const [totalMsgRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(messages).where(inArray(messages.instanceId, instanceIds));
   const [msg24hRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(messages).where(and(inArray(messages.instanceId, instanceIds), gte(messages.createdAt, last24h)));
+  mark("counts (contacts+messages)");
 
   // Série diária (Postgres usa to_char em vez de DATE())
   const dailyContactsRows = await db.select({
@@ -877,6 +886,7 @@ export async function getDashboardOverview(
     else dailyMap.set(r.date, { newContacts: 0, messages: Number(r.count) });
   }
   const dailySeries = Array.from(dailyMap.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({ date, ...v }));
+  mark("dailySeries");
 
   // Distribuição por etiqueta
   const labelDist = await db.select({
@@ -889,8 +899,9 @@ export async function getDashboardOverview(
     .where(and(inArray(contacts.instanceId, instanceIds), eq(labels.userId, userId)))
     .groupBy(labels.id, labels.name, labels.color)
     .orderBy(desc(sql`COUNT(${contacts.id})`));
+  mark("labelDist");
 
-  // Top instâncias
+  // Top instâncias — ⚠️ SUSPEITO: instances ⨝ contacts ⨝ messages (fan-out, sem filtro de data)
   const topInst = await db.select({
     instanceId: instances.id,
     alias: instances.alias,
@@ -904,6 +915,7 @@ export async function getDashboardOverview(
     .where(eq(instances.userId, userId))
     .groupBy(instances.id, instances.alias, instances.uid, instances.status)
     .orderBy(desc(sql`COUNT(${messages.id})`));
+  mark("topInstances (instances⨝contacts⨝messages)");
 
   // Distribuição de leads por operação (instância) no período filtrado
   const opDist = await db.select({
@@ -923,6 +935,7 @@ export async function getDashboardOverview(
     .where(eq(instances.userId, userId))
     .groupBy(instances.id, instances.alias, instances.uid)
     .orderBy(desc(sql`COUNT(${contacts.id})`));
+  mark("operationDistribution");
 
   // Paleta estável (mesma ordem do retorno → mesma cor entre refetches)
   const opPalette = [
@@ -994,6 +1007,7 @@ export async function getDashboardOverview(
     ? Math.round((validLeadsCount / totalLeadsInPeriod) * 100)
     : 0;
   const invalidLeadsPercent = totalLeadsInPeriod > 0 ? 100 - validLeadsPercent : 0;
+  mark("period leads/contacted/valid (3 joins contacts⨝messages)");
 
   // Tempo até primeiro contato (1ª outbound) — média em minutos
   // E % atendidos em ≤5min (em relação ao total de leads do período)
@@ -1025,6 +1039,7 @@ export async function getDashboardOverview(
   const respondedWithin5MinPercent = totalLeadsInPeriod > 0
     ? Math.round((within5MinCount / totalLeadsInPeriod) * 100)
     : 0;
+  mark("timeStats (firstOut subquery)");
 
   // Heatmap por hora (Postgres usa EXTRACT)
   const hourlyRows = await db.select({
@@ -1036,8 +1051,9 @@ export async function getDashboardOverview(
   for (let h = 0; h < 24; h++) hourlyMap.set(h, 0);
   for (const r of hourlyRows) hourlyMap.set(Number(r.hour), Number(r.count));
   const hourlyHeatmap = Array.from(hourlyMap.entries()).map(([hour, count]) => ({ hour, count }));
+  mark("hourlyHeatmap");
 
-  // Uptime (Postgres SUM CASE WHEN funciona normal)
+  // Uptime (Postgres SUM CASE WHEN funciona normal) — 1 query POR instância (N+1)
   const uptimeData = await Promise.all(userInstances.map(async (inst) => {
     const [row] = await db.select({
       total: sql<number>`COUNT(*)::int`,
@@ -1053,6 +1069,7 @@ export async function getDashboardOverview(
       onlineChecks: online,
     };
   }));
+  mark("instanceUptime (N+1 statusLogs)");
 
   return {
     totalContacts: Number(totalContactsRow?.count ?? 0),

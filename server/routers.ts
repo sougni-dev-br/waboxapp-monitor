@@ -413,7 +413,11 @@ export const appRouter = router({
 
     /** Só unidades ativas — usado pelos selects de cadastro e pelo filtro. */
     listActive: protectedProcedure.query(async () => {
-      return getActiveUnits();
+      console.log("[units.listActive] iniciando"); // LOG TEMP
+      const t0 = Date.now();
+      const r = await getActiveUnits();
+      console.log(`[units.listActive] concluído em ${Date.now() - t0}ms (${r.length} unidades)`); // LOG TEMP
+      return r;
     }),
 
     /** Contagem de instâncias vinculadas por unidade (para a UI de gestão). */
@@ -978,14 +982,18 @@ export const appRouter = router({
         }).optional()
       )
       .query(async ({ input, ctx }) => {
+        console.log("[dashboard.overview] iniciando"); // LOG TEMP
+        const t0 = Date.now();
         const scope = await resolveScope(ctx.user);
-        return getDashboardOverview(OWNER_ID, {
+        const result = await getDashboardOverview(OWNER_ID, {
           dateFrom: input?.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input?.dateTo ? new Date(input.dateTo) : undefined,
           hospitals: clampHospitals(input?.hospitals, scope.allowedHospitals),
           procedures: input?.procedures,
           visibleInstanceIds: scope.instanceIds,
         });
+        console.log(`[dashboard.overview] concluído em ${Date.now() - t0}ms`); // LOG TEMP
+        return result;
       }),
 
     operation: protectedProcedure
@@ -1014,6 +1022,7 @@ export const appRouter = router({
         }).optional()
       )
       .query(async ({ input, ctx }) => {
+        console.log("[dashboard.mediaInvestment] iniciando"); // LOG TEMP — confirma se é chamado
         const scope = await resolveScope(ctx.user);
         const dateFrom = input?.dateFrom ? new Date(input.dateFrom) : undefined;
         const dateTo = input?.dateTo ? new Date(input.dateTo + "T23:59:59.999") : undefined;
