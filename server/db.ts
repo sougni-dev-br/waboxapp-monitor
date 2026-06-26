@@ -59,6 +59,8 @@ export async function getDb() {
           : undefined,
         max: 10,
       });
+      // Evita que erros assíncronos de conexão derrubem o processo.
+      _pool.on("error", (err) => console.warn("[Database] pool error:", err.message));
       _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
@@ -66,6 +68,70 @@ export async function getDb() {
     }
   }
   return _db;
+}
+
+/**
+ * Fecha o pool atual (se houver) e força a recriação no próximo getDb().
+ * Usado no boot para descartar conexões "mortas" de um deploy anterior.
+ */
+export async function resetDbPool(): Promise<void> {
+  const old = _pool;
+  _db = null;
+  _pool = null;
+  if (old) {
+    try {
+      await old.end();
+    } catch {
+      /* pool já podia estar morto — ignora */
+    }
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Aguarda o Postgres ficar pronto ANTES de rodar migrações. Após deploys o
+ * banco às vezes ainda não aceita conexões (ECONNREFUSED) — fazemos retry com
+ * backoff exponencial. Cria um pool fresh a cada boot e prova com `SELECT 1`.
+ *
+ * Backoff entre tentativas: 1s, 2s, 4s, 8s (a 5ª tentativa que falha lança).
+ * Lança erro claro se esgotar as tentativas — o processo deve sair para o
+ * orquestrador (Render) reiniciar quando o banco voltar.
+ */
+export async function waitForDb(maxAttempts = 5): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    console.warn("[boot] DATABASE_URL ausente — pulando waitForDb");
+    return;
+  }
+  // Descarta qualquer pool herdado e garante conexões novas neste boot.
+  await resetDbPool();
+
+  const delays = [1000, 2000, 4000, 8000, 16000]; // backoff exponencial
+  let lastErr: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`[boot] aguardando banco (tentativa ${attempt}/${maxAttempts})...`);
+    try {
+      const db = await getDb();
+      if (!db) throw new Error("getDb() retornou null");
+      await db.execute(sql`SELECT 1`);
+      console.log(`[boot] banco pronto (tentativa ${attempt})`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[boot] banco indisponível na tentativa ${attempt}/${maxAttempts}: ${msg}`);
+      // Pool pode ter ficado em estado ruim — recria para a próxima tentativa.
+      await resetDbPool();
+      if (attempt < maxAttempts) await sleep(delays[attempt - 1] ?? 16000);
+    }
+  }
+
+  throw new Error(
+    `Não foi possível conectar ao Postgres após ${maxAttempts} tentativas. Último erro: ${
+      lastErr instanceof Error ? lastErr.message : String(lastErr)
+    }`,
+  );
 }
 
 // ─── Users ───────────────────────────────────────────────────────────────────

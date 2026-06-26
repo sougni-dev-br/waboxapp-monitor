@@ -14,6 +14,7 @@ import {
   applyLabelsToContact,
   contactHasLabel,
   getDb,
+  waitForDb,
   getFirstInboundMessages,
   getInboundMessageCount,
   getInstanceByUid,
@@ -336,6 +337,15 @@ async function startServer() {
   // `server.listen()` era chamado primeiro e as migrações rodavam dentro do
   // callback — o servidor ficava "live" e respondia tRPC com erro silencioso
   // (responseBytes=29) enquanto o schema ainda não tinha sido aplicado.
+
+  // 0) Espera o Postgres aceitar conexões (retry com backoff). Se o banco não
+  //    subir a tempo, encerra o processo para o Render reiniciar e tentar de novo.
+  try {
+    await waitForDb();
+  } catch (err) {
+    console.error("[boot] banco indisponível — encerrando para reinício:", err);
+    process.exit(1);
+  }
 
   // 1+2) Migrações + seed de usuários — AGUARDADAS antes de servir requests.
   const migStart = Date.now();
