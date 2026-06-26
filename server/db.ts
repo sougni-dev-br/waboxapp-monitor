@@ -901,21 +901,21 @@ export async function getDashboardOverview(
     .orderBy(desc(sql`COUNT(${contacts.id})`));
   mark("labelDist");
 
-  // Top instâncias — ⚠️ SUSPEITO: instances ⨝ contacts ⨝ messages (fan-out, sem filtro de data)
+  // Top instâncias — subqueries agregadas separadas (sem fan-out cartesiano).
+  // Antes: instances ⨝ contacts ⨝ messages multiplicava contacts × messages,
+  // gerando milhões de linhas intermediárias (e inflava messageCount). Agora
+  // cada contagem é uma subquery correlacionada — usa os índices instanceId.
   const topInst = await db.select({
     instanceId: instances.id,
     alias: instances.alias,
     uid: instances.uid,
     status: instances.status,
-    contactCount: sql<number>`COUNT(DISTINCT ${contacts.id})::int`,
-    messageCount: sql<number>`COUNT(${messages.id})::int`,
+    contactCount: sql<number>`(SELECT COUNT(*) FROM ${contacts} WHERE ${contacts.instanceId} = ${instances.id})::int`,
+    messageCount: sql<number>`(SELECT COUNT(*) FROM ${messages} WHERE ${messages.instanceId} = ${instances.id})::int`,
   }).from(instances)
-    .leftJoin(contacts, eq(contacts.instanceId, instances.id))
-    .leftJoin(messages, eq(messages.instanceId, instances.id))
     .where(eq(instances.userId, userId))
-    .groupBy(instances.id, instances.alias, instances.uid, instances.status)
-    .orderBy(desc(sql`COUNT(${messages.id})`));
-  mark("topInstances (instances⨝contacts⨝messages)");
+    .orderBy(desc(sql`(SELECT COUNT(*) FROM ${messages} WHERE ${messages.instanceId} = ${instances.id})`));
+  mark("topInstances (subqueries correlacionadas)");
 
   // Distribuição de leads por operação (instância) no período filtrado
   const opDist = await db.select({
@@ -1053,14 +1053,26 @@ export async function getDashboardOverview(
   const hourlyHeatmap = Array.from(hourlyMap.entries()).map(([hour, count]) => ({ hour, count }));
   mark("hourlyHeatmap");
 
-  // Uptime (Postgres SUM CASE WHEN funciona normal) — 1 query POR instância (N+1)
-  const uptimeData = await Promise.all(userInstances.map(async (inst) => {
-    const [row] = await db.select({
-      total: sql<number>`COUNT(*)::int`,
-      online: sql<number>`COALESCE(SUM(CASE WHEN ${statusLogs.status} = 'online' THEN 1 ELSE 0 END), 0)::int`,
-    }).from(statusLogs).where(eq(statusLogs.instanceId, inst.id));
-    const total = Number(row?.total ?? 0);
-    const online = Number(row?.online ?? 0);
+  // Uptime — uma única query agregada por instância (antes era N+1: 1 query por
+  // instância em status_logs). Mapeia de volta sobre userInstances pra preservar
+  // alias/ordem e incluir instâncias sem nenhum log (0%).
+  const uptimeRows = await db.select({
+    instanceId: statusLogs.instanceId,
+    total: sql<number>`COUNT(*)::int`,
+    online: sql<number>`COALESCE(SUM(CASE WHEN ${statusLogs.status} = 'online' THEN 1 ELSE 0 END), 0)::int`,
+  }).from(statusLogs)
+    .where(inArray(statusLogs.instanceId, instanceIds))
+    .groupBy(statusLogs.instanceId);
+
+  const uptimeByInstance = new Map<number, { total: number; online: number }>();
+  for (const r of uptimeRows) {
+    uptimeByInstance.set(Number(r.instanceId), { total: Number(r.total), online: Number(r.online) });
+  }
+
+  const uptimeData = userInstances.map((inst) => {
+    const agg = uptimeByInstance.get(inst.id) ?? { total: 0, online: 0 };
+    const total = agg.total;
+    const online = agg.online;
     return {
       instanceId: inst.id,
       alias: inst.alias ?? inst.uid,
@@ -1068,8 +1080,8 @@ export async function getDashboardOverview(
       totalChecks: total,
       onlineChecks: online,
     };
-  }));
-  mark("instanceUptime (N+1 statusLogs)");
+  });
+  mark("instanceUptime (1 query GROUP BY)");
 
   return {
     totalContacts: Number(totalContactsRow?.count ?? 0),
