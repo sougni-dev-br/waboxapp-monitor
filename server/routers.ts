@@ -1024,8 +1024,15 @@ export const appRouter = router({
           procedures: input?.procedures,
         };
         // Fonte primária: banco (ETL). Fallback: leitura direta da planilha.
+        // LOGS TEMPORÁRIOS — diagnóstico de lentidão (banco vs planilha).
+        const t0 = Date.now();
         const fromDb = await getMediaInvestmentFromDb(filter);
-        return fromDb ?? getMediaInvestmentSummary(filter);
+        console.log(`[dashboard.mediaInvestment] fonte: ${fromDb ? "banco" : "planilha"} | dbRead=${Date.now() - t0}ms`);
+        if (fromDb) return fromDb;
+        const t1 = Date.now();
+        const r = await getMediaInvestmentSummary(filter);
+        console.log(`[dashboard.mediaInvestment] fallback planilha levou ${Date.now() - t1}ms`);
+        return r;
       }),
 
     /**
@@ -1048,8 +1055,15 @@ export const appRouter = router({
           hospital: clampHospital(input?.hospital, scope.allowedHospitals),
           allowedHospitals: scope.allowedHospitals,
         };
+        // LOGS TEMPORÁRIOS — diagnóstico de lentidão (banco vs planilha).
+        const t0 = Date.now();
         const fromDb = await getInvestmentFromDb(opts);
-        return fromDb ?? getInvestmentSummary(opts);
+        console.log(`[dashboard.investment] fonte: ${fromDb ? "banco" : "planilha"} | dbRead=${Date.now() - t0}ms`);
+        if (fromDb) return fromDb;
+        const t1 = Date.now();
+        const r = await getInvestmentSummary(opts);
+        console.log(`[dashboard.investment] fallback planilha levou ${Date.now() - t1}ms`);
+        return r;
       }),
 
     /**
@@ -1072,8 +1086,15 @@ export const appRouter = router({
           hospital: clampHospital(input?.hospital, scope.allowedHospitals),
           allowedHospitals: scope.allowedHospitals,
         };
+        // LOGS TEMPORÁRIOS — diagnóstico de lentidão (banco vs planilha).
+        const t0 = Date.now();
         const fromDb = await getPipelineFromDb(opts);
-        return fromDb ?? getPipelineSummary(opts);
+        console.log(`[dashboard.pipeline] fonte: ${fromDb ? "banco" : "planilha"} | dbRead=${Date.now() - t0}ms`);
+        if (fromDb) return fromDb;
+        const t1 = Date.now();
+        const r = await getPipelineSummary(opts);
+        console.log(`[dashboard.pipeline] fallback planilha levou ${Date.now() - t1}ms`);
+        return r;
       }),
 
     /**

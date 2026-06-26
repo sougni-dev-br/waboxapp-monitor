@@ -1855,6 +1855,7 @@ export async function getInvestmentFromDb(opts: InvestmentDbOpts = {}): Promise<
   if (!db) return null;
 
   const media = await db.select().from(sheetsMediaRows);
+  console.log(`[getInvestmentFromDb] sheets_media_rows=${media.length}`); // LOG TEMP
   let custoRows: CustoRow[];
   if (media.length > 0) {
     const mediaRows: MediaRow[] = media.map(dbRowToMediaRow);
@@ -1880,6 +1881,7 @@ export async function getMediaInvestmentFromDb(filter: MediaFilter): Promise<Med
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(sheetsMediaRows);
+  console.log(`[getMediaInvestmentFromDb] sheets_media_rows=${rows.length}`); // LOG TEMP
   if (rows.length === 0) return null; // vazio → fallback planilha
   return summarizeMediaRows(rows.map(dbRowToMediaRow), filter);
 }
@@ -1889,6 +1891,7 @@ export async function getPipelineFromDb(opts: InvestmentDbOpts = {}): Promise<Pi
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(sheetsPipelineLeads);
+  console.log(`[getPipelineFromDb] sheets_pipeline_leads=${rows.length}`); // LOG TEMP
   if (rows.length === 0) return null; // vazio → fallback planilha
   const leads: PipelineLead[] = rows.map((r) => ({
     dateEntered: r.dateEntered,
