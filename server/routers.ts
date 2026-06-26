@@ -27,6 +27,7 @@ import {
   getFirstInboundMessages,
   getInstanceByUid,
   getInstances,
+  getVisibleInstances,
   getLabelRules,
   getLabels,
   getLeadsWithAggregatedText,
@@ -43,10 +44,47 @@ import { checkInstanceStatus, sendTextMessage, setHookUrl } from "./waboxapp";
 import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 import { findUserByUsername, verifyPassword, touchLastSignedIn, hashPassword, PERMISSIONS } from "./auth";
-import { getInvestmentSummary, getPipelineSummary, normalizeHospital } from "./sheetsIngest";
+import { getInvestmentSummary, getPipelineSummary } from "./sheetsIngest";
+import { HOSPITALS, instanceHospital } from "./hospitalUtils";
 
-// ID fixo do painel (único usuário do sistema)
+// ID fixo do painel (dono dos dados — instâncias/contatos/mensagens)
 const OWNER_ID = 1;
+
+/**
+ * Resolve o escopo de visibilidade de unidades de um usuário.
+ *
+ * - Admins e usuários sem `allowedHospitals` (null/[]) → sem restrição:
+ *   `instanceIds = undefined` (as funções de dashboard tratam como "tudo") e
+ *   `allowedHospitals = null` (clamp vira no-op).
+ * - Usuário restrito → `instanceIds` = IDs visíveis e `allowedHospitals` = lista.
+ *
+ * Retornar `undefined` em instanceIds é importante: preserva 100% o
+ * comportamento atual para admins (sem nenhuma filtragem extra).
+ */
+async function resolveScope(
+  user: { role: string; allowedHospitals?: string[] | null },
+): Promise<{ instanceIds?: number[]; allowedHospitals: string[] | null }> {
+  const allowed = user.allowedHospitals ?? null;
+  if (user.role === "admin" || !allowed || allowed.length === 0) {
+    return { instanceIds: undefined, allowedHospitals: null };
+  }
+  const visible = await getVisibleInstances(OWNER_ID, allowed);
+  return { instanceIds: visible.map((i) => i.id), allowedHospitals: allowed };
+}
+
+/** Restringe um filtro de hospitais (multi) ao conjunto permitido do usuário. */
+function clampHospitals(input: string[] | undefined, allowed: string[] | null): string[] | undefined {
+  if (!allowed || allowed.length === 0) return input; // sem restrição
+  if (!input || input.length === 0) return allowed;    // usuário não filtrou → limita ao permitido
+  return input.filter((h) => allowed.includes(h));
+}
+
+/** Restringe um filtro de hospital (single) ao conjunto permitido do usuário. */
+function clampHospital(input: string | undefined, allowed: string[] | null): string | undefined {
+  if (!allowed || allowed.length === 0) return input;     // sem restrição
+  if (input && allowed.includes(input)) return input;     // escolha válida
+  return undefined; // escolha inválida/ausente → backend agrega só o permitido via instanceIds; sheets fica amplo mas sem dado cruzado relevante
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -61,6 +99,8 @@ export const appRouter = router({
         name: ctx.user.name,
         email: ctx.user.email,
         role: ctx.user.role,
+        // Unidades visíveis (null = sem restrição). Admin sempre vê tudo.
+        allowedHospitals: ctx.user.role === "admin" ? null : (ctx.user.allowedHospitals ?? null),
         // Lista completa de chaves liberadas para esse role — frontend usa
         // pra esconder UI antes mesmo de pedir os dados.
         permissions: Object.fromEntries(
@@ -161,6 +201,7 @@ export const appRouter = router({
           email: users.email,
           role: users.role,
           active: users.active,
+          allowedHospitals: users.allowedHospitals,
           createdAt: users.createdAt,
           lastSignedIn: users.lastSignedIn,
         }).from(users).orderBy(users.id);
@@ -172,6 +213,7 @@ export const appRouter = router({
           name: z.string().trim().min(1).max(128),
           password: z.string().min(6, "Mínimo 6 caracteres").max(128),
           role: z.enum(["admin", "user"]).default("user"),
+          allowedHospitals: z.array(z.enum(HOSPITALS)).nullable().optional(),
         }))
         .mutation(async ({ input }) => {
           const db = await import("./db").then((m) => m.getDb());
@@ -184,6 +226,8 @@ export const appRouter = router({
             throw new TRPCError({ code: "CONFLICT", message: `Username '${username}' já existe.` });
           }
           const passwordHash = await hashPassword(input.password);
+          // [] = sem restrição (equivale a null). Admin ignora o campo.
+          const allowed = input.allowedHospitals?.length ? input.allowedHospitals : null;
           const inserted = await db.insert(users).values({
             openId: `user-${username}-${Date.now()}`,
             username,
@@ -191,9 +235,38 @@ export const appRouter = router({
             name: input.name,
             role: input.role,
             active: true,
+            allowedHospitals: allowed,
             loginMethod: "password",
           }).returning({ id: users.id });
           return { id: inserted[0]?.id, username, role: input.role };
+        }),
+      update: adminProcedure
+        .input(z.object({
+          id: z.number(),
+          name: z.string().trim().min(1).max(128).optional(),
+          role: z.enum(["admin", "user"]).optional(),
+          active: z.boolean().optional(),
+          allowedHospitals: z.array(z.enum(HOSPITALS)).nullable().optional(),
+          password: z.string().min(6).max(128).optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const db = await import("./db").then((m) => m.getDb());
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+          const { users } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+
+          const patch: Record<string, unknown> = {};
+          if (input.name !== undefined) patch.name = input.name;
+          if (input.role !== undefined) patch.role = input.role;
+          if (input.active !== undefined) patch.active = input.active;
+          if (input.allowedHospitals !== undefined) {
+            patch.allowedHospitals = input.allowedHospitals?.length ? input.allowedHospitals : null;
+          }
+          if (input.password !== undefined) patch.passwordHash = await hashPassword(input.password);
+          if (Object.keys(patch).length === 0) return { success: true };
+
+          await db.update(users).set(patch).where(eq(users.id, input.id));
+          return { success: true };
         }),
       delete: adminProcedure
         .input(z.object({ id: z.number() }))
@@ -288,12 +361,12 @@ export const appRouter = router({
 
   // ─── Instances ───────────────────────────────────────────────────────────────
   instances: router({
-    list: protectedProcedure.query(async () => {
-      return getInstances(OWNER_ID);
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
     }),
 
     add: protectedProcedure
-      .input(z.object({ uid: z.string().min(5), alias: z.string().optional() }))
+      .input(z.object({ uid: z.string().min(5), alias: z.string().optional(), hospital: z.enum(HOSPITALS).optional() }))
       .mutation(async ({ input }) => {
         const config = await getApiConfig(OWNER_ID);
         if (!config?.token) {
@@ -314,6 +387,7 @@ export const appRouter = router({
           userId: OWNER_ID,
           uid: input.uid,
           alias: input.alias ?? statusResult.alias ?? input.uid,
+          hospital: input.hospital ?? null,
           status: statusResult.success ? "online" : "offline",
           platform: statusResult.platform ?? null,
           battery: statusResult.battery ? parseInt(statusResult.battery, 10) : null,
@@ -360,6 +434,35 @@ export const appRouter = router({
         return { success: true, alias: input.alias };
       }),
 
+    /**
+     * Atualiza alias e/ou unidade (hospital) de um canal existente.
+     * Permite backfill manual da coluna `hospital` nos canais já cadastrados.
+     */
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        alias: z.string().trim().min(1).max(128).optional(),
+        hospital: z.enum(HOSPITALS).nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const allInstances = await getInstances(OWNER_ID);
+        const instance = allInstances.find((i) => i.id === input.id);
+        if (!instance) throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
+
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+        const { instances } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const patch: { alias?: string; hospital?: string | null } = {};
+        if (input.alias !== undefined) patch.alias = input.alias;
+        if (input.hospital !== undefined) patch.hospital = input.hospital;
+        if (Object.keys(patch).length === 0) return { success: true };
+
+        await db.update(instances).set(patch).where(eq(instances.id, input.id));
+        return { success: true };
+      }),
+
     checkStatus: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
@@ -394,8 +497,8 @@ export const appRouter = router({
 
     statusLogs: protectedProcedure
       .input(z.object({ instanceId: z.number(), limit: z.number().optional() }))
-      .query(async ({ input }) => {
-        const allInstances = await getInstances(OWNER_ID);
+      .query(async ({ input, ctx }) => {
+        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         return getStatusLogs(input.instanceId, input.limit ?? 50);
@@ -443,7 +546,7 @@ export const appRouter = router({
         const host = (ctx.req.headers["x-forwarded-host"] as string) ?? ctx.req.headers.host ?? "monitor.sougni.com";
         const expectedHookUrl = `${proto}://${host}/api/webhook/waboxapp`;
 
-        const allInstances = await getInstances(OWNER_ID);
+        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
 
         // Pra cada instância online com token, busca o hook_url atual no WaboxApp
         const instances = await Promise.all(allInstances.map(async (inst) => {
@@ -483,8 +586,8 @@ export const appRouter = router({
   analytics: router({
     dailyContacts: protectedProcedure
       .input(z.object({ instanceId: z.number(), days: z.number().optional() }))
-      .query(async ({ input }) => {
-        const allInstances = await getInstances(OWNER_ID);
+      .query(async ({ input, ctx }) => {
+        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         return getDailyContactStats(input.instanceId, input.days ?? 30);
@@ -630,8 +733,8 @@ export const appRouter = router({
           labelId: z.number().nullable().optional(),
         })
       )
-      .query(async ({ input }) => {
-        const allInstances = await getInstances(OWNER_ID);
+      .query(async ({ input, ctx }) => {
+        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         const rows = await getContacts(input.instanceId, {
@@ -657,8 +760,8 @@ export const appRouter = router({
           labelId: z.number().nullable().optional(),
         })
       )
-      .query(async ({ input }) => {
-        const allInstances = await getInstances(OWNER_ID);
+      .query(async ({ input, ctx }) => {
+        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
         const instanceIds = allInstances.map((i) => i.id);
         const rows = await getAllContacts(instanceIds, {
           dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
@@ -725,8 +828,9 @@ export const appRouter = router({
   // ─── Dashboard ────────────────────────────────────────────────
   dashboard: router({
     realtime: protectedProcedure
-      .query(async () => {
-        return getRealtimePulse(OWNER_ID);
+      .query(async ({ ctx }) => {
+        const scope = await resolveScope(ctx.user);
+        return getRealtimePulse(OWNER_ID, scope.instanceIds);
       }),
 
     overview: protectedProcedure
@@ -738,12 +842,14 @@ export const appRouter = router({
           procedures: z.array(z.string()).optional(),
         }).optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const scope = await resolveScope(ctx.user);
         return getDashboardOverview(OWNER_ID, {
           dateFrom: input?.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input?.dateTo ? new Date(input.dateTo) : undefined,
-          hospitals: input?.hospitals,
+          hospitals: clampHospitals(input?.hospitals, scope.allowedHospitals),
           procedures: input?.procedures,
+          visibleInstanceIds: scope.instanceIds,
         });
       }),
 
@@ -754,10 +860,12 @@ export const appRouter = router({
           dateTo: z.string().optional(),
         }).optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const scope = await resolveScope(ctx.user);
         return getOperationOverview(OWNER_ID, {
           dateFrom: input?.dateFrom ? new Date(input.dateFrom) : undefined,
           dateTo: input?.dateTo ? new Date(input.dateTo) : undefined,
+          visibleInstanceIds: scope.instanceIds,
         });
       }),
 
@@ -770,13 +878,14 @@ export const appRouter = router({
           procedures: z.array(z.string()).optional(),
         }).optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const scope = await resolveScope(ctx.user);
         const dateFrom = input?.dateFrom ? new Date(input.dateFrom) : undefined;
         const dateTo = input?.dateTo ? new Date(input.dateTo + "T23:59:59.999") : undefined;
         return getMediaInvestmentSummary({
           dateFrom,
           dateTo,
-          hospitals: input?.hospitals,
+          hospitals: clampHospitals(input?.hospitals, scope.allowedHospitals),
           procedures: input?.procedures,
         });
       }),
@@ -793,11 +902,13 @@ export const appRouter = router({
           hospital: z.string().optional(),
         }).optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const scope = await resolveScope(ctx.user);
         return getInvestmentSummary({
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
-          hospital: input?.hospital,
+          hospital: clampHospital(input?.hospital, scope.allowedHospitals),
+          allowedHospitals: scope.allowedHospitals,
         });
       }),
 
@@ -813,11 +924,13 @@ export const appRouter = router({
           hospital: z.string().optional(),
         }).optional()
       )
-      .query(async ({ input }) => {
+      .query(async ({ input, ctx }) => {
+        const scope = await resolveScope(ctx.user);
         return getPipelineSummary({
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
-          hospital: input?.hospital,
+          hospital: clampHospital(input?.hospital, scope.allowedHospitals),
+          allowedHospitals: scope.allowedHospitals,
         });
       }),
 
@@ -831,8 +944,8 @@ export const appRouter = router({
      *   senão default Catarata
      * - Inclui todos (groups e users) — você filtra depois na planilha
      */
-    exportLeadsForPipeline: protectedProcedure.query(async () => {
-      const allInstances = await getInstances(OWNER_ID);
+    exportLeadsForPipeline: protectedProcedure.query(async ({ ctx }) => {
+      const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
       const instanceIds = allInstances.map((i) => i.id);
 
       const leads = await getLeadsWithAggregatedText(instanceIds);
@@ -841,11 +954,9 @@ export const appRouter = router({
         /\b(refrativa|lasik|prk|miopia|m[ií]ope|astigmatismo|presbiopia|hipermetropia|grau\s+(no|nos)\s+olho)\b/i;
 
       const out = leads.map((lead) => {
-        const alias = (lead.instanceAlias ?? "").toUpperCase();
-        let hospital: string;
-        if (/\bHOPE\b/i.test(alias)) hospital = "HOPE";
-        else if (/\bCBV\b/i.test(alias)) hospital = "CBV";
-        else hospital = "HOLHOS";
+        // Deriva o hospital pela fonte única (instances.hospital quando houver,
+        // senão fallback do alias). Mantém o mesmo conjunto canônico do resto do app.
+        const hospital = instanceHospital({ hospital: lead.instanceHospital, alias: lead.instanceAlias });
 
         const procedure = REFRATIVA_REGEX.test(lead.allText) ? "Refrativa" : "Catarata";
 
@@ -871,11 +982,9 @@ export const appRouter = router({
 
       return {
         total: out.length,
-        countByHospital: {
-          HOPE: out.filter((l) => l.hospital === "HOPE").length,
-          CBV: out.filter((l) => l.hospital === "CBV").length,
-          "H.Olhos": out.filter((l) => l.hospital === "H.Olhos").length,
-        },
+        countByHospital: Object.fromEntries(
+          HOSPITALS.map((h) => [h, out.filter((l) => l.hospital === h).length])
+        ),
         countByProcedure: {
           Catarata: out.filter((l) => l.procedure === "Catarata").length,
           Refrativa: out.filter((l) => l.procedure === "Refrativa").length,

@@ -7,9 +7,10 @@ import { Pencil, X, Check } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { formatPhoneUid } from "@/lib/formatPhone";
+import { HOSPITALS, type Hospital } from "@/lib/hospitals";
 
 interface InstanceAliasEditorProps {
-  instance: { id: number; uid: string; alias?: string | null };
+  instance: { id: number; uid: string; alias?: string | null; hospital?: string | null };
   open: boolean;
   onClose: () => void;
   onUpdated?: (newAlias: string) => void;
@@ -17,23 +18,27 @@ interface InstanceAliasEditorProps {
 
 export function InstanceAliasEditor({ instance, open, onClose, onUpdated }: InstanceAliasEditorProps) {
   const [alias, setAlias] = useState(instance.alias ?? "");
+  const [hospital, setHospital] = useState<Hospital | "">((instance.hospital as Hospital) ?? "");
   const utils = trpc.useUtils();
-  const mutation = trpc.instances.updateAlias.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Canal renomeado para "${data.alias}"`);
+  const mutation = trpc.instances.update.useMutation({
+    onSuccess: () => {
+      toast.success("Canal atualizado");
       utils.instances.list.invalidate();
-      onUpdated?.(data.alias);
+      onUpdated?.(alias.trim());
       onClose();
     },
     onError: (err) => {
-      toast.error(err.message || "Falha ao renomear");
+      toast.error(err.message || "Falha ao salvar");
     },
   });
 
-  // Reset valor quando o modal abre
+  // Reset valores quando o modal abre
   useEffect(() => {
-    if (open) setAlias(instance.alias ?? "");
-  }, [open, instance.alias]);
+    if (open) {
+      setAlias(instance.alias ?? "");
+      setHospital((instance.hospital as Hospital) ?? "");
+    }
+  }, [open, instance.alias, instance.hospital]);
 
   if (!open) return null;
 
@@ -41,11 +46,17 @@ export function InstanceAliasEditor({ instance, open, onClose, onUpdated }: Inst
     e.preventDefault();
     const trimmed = alias.trim();
     if (!trimmed) return;
-    if (trimmed === (instance.alias ?? "")) {
+    const aliasUnchanged = trimmed === (instance.alias ?? "");
+    const hospitalUnchanged = (hospital || null) === (instance.hospital ?? null);
+    if (aliasUnchanged && hospitalUnchanged) {
       onClose();
       return;
     }
-    mutation.mutate({ id: instance.id, alias: trimmed });
+    mutation.mutate({
+      id: instance.id,
+      alias: aliasUnchanged ? undefined : trimmed,
+      hospital: hospitalUnchanged ? undefined : (hospital || null),
+    });
   }
 
   return (
@@ -92,6 +103,26 @@ export function InstanceAliasEditor({ instance, open, onClose, onUpdated }: Inst
               maxLength={128}
               className="w-full h-10 px-3 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 focus:ring-2 focus:ring-[#DFFF00]/40"
             />
+          </div>
+
+          <div>
+            <label htmlFor="hospital" className="block text-xs font-semibold text-foreground mb-1.5">
+              Unidade
+            </label>
+            <select
+              id="hospital"
+              value={hospital}
+              onChange={(e) => setHospital(e.target.value as Hospital | "")}
+              className="w-full h-10 px-3 text-sm bg-background border border-border rounded-lg outline-none focus:border-foreground/40 focus:ring-2 focus:ring-[#DFFF00]/40"
+            >
+              <option value="">Derivar do nome do canal</option>
+              {HOSPITALS.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Controla quais usuários enxergam este canal.
+            </p>
           </div>
 
           <div className="flex items-center gap-2 pt-2">

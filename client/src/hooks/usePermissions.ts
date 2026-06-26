@@ -33,6 +33,8 @@ export interface AuthMe {
   name: string | null;
   email: string | null;
   role: Role;
+  /** Unidades visíveis. null = sem restrição (vê tudo). */
+  allowedHospitals: string[] | null;
   permissions: Record<string, boolean>;
 }
 
@@ -59,10 +61,14 @@ export function usePermissions() {
 
   const isAdmin = role === "admin";
 
+  /** Unidades visíveis (null = sem restrição). Admin sempre vê tudo. */
+  const allowedHospitals: string[] | null = isAdmin ? null : (user?.allowedHospitals ?? null);
+
   return {
     user: (user as AuthMe | null | undefined) ?? null,
     role,
     isAdmin,
+    allowedHospitals,
     is,
     can,
     isLoading,

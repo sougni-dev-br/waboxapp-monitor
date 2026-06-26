@@ -46,6 +46,12 @@ export const users = pgTable(
     email: varchar("email", { length: 320 }),
     loginMethod: varchar("loginMethod", { length: 64 }),
     role: roleEnum("role").default("user").notNull(),
+    /**
+     * Unidades (hospitais) que o usuário pode visualizar.
+     * `null` ou `[]` = sem restrição (vê tudo). Admins ignoram este campo.
+     * Ex.: ["HOLHOS", "HOPE"]
+     */
+    allowedHospitals: jsonb("allowedHospitals").$type<string[] | null>(),
     /** Se false, usuário não pode logar. */
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -87,6 +93,12 @@ export const instances = pgTable(
     userId: integer("userId").notNull(),
     uid: varchar("uid", { length: 64 }).notNull(),
     alias: varchar("alias", { length: 128 }),
+    /**
+     * Unidade/hospital ao qual o canal pertence (HOLHOS | HOPE | CBV | CRV |
+     * SANTA LUZIA). Nullable — quando vazio, deriva-se de `alias` via
+     * `hospitalOf()` como fallback, mantendo canais legados funcionando.
+     */
+    hospital: varchar("hospital", { length: 64 }),
     status: instanceStatusEnum("status").default("unknown").notNull(),
     platform: varchar("platform", { length: 32 }),
     battery: integer("battery"),

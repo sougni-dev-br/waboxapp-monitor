@@ -22,6 +22,8 @@ export interface AuthUser {
   email: string | null;
   role: Role;
   active: boolean;
+  /** Unidades visíveis. null/[] = sem restrição (vê tudo). Admin ignora. */
+  allowedHospitals: string[] | null;
 }
 
 function toAuth(u: User): AuthUser {
@@ -33,6 +35,7 @@ function toAuth(u: User): AuthUser {
     email: u.email,
     role: u.role,
     active: u.active,
+    allowedHospitals: u.allowedHospitals ?? null,
   };
 }
 

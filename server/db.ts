@@ -25,6 +25,7 @@ import {
   statusLogs,
   users,
 } from "../drizzle/schema";
+import { instanceHospital } from "./hospitalUtils";
 
 const { Pool } = pg;
 
@@ -120,6 +121,20 @@ export async function getInstances(userId: number): Promise<Instance[]> {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(instances).where(eq(instances.userId, userId)).orderBy(instances.alias);
+}
+
+/**
+ * Instâncias visíveis para um usuário, respeitando o controle de acesso por
+ * unidade. `allowedHospitals` null/vazio = sem restrição (retorna tudo).
+ * Para unidades não preenchidas na coluna, o hospital é derivado do alias.
+ */
+export async function getVisibleInstances(
+  userId: number,
+  allowedHospitals: string[] | null,
+): Promise<Instance[]> {
+  const all = await getInstances(userId);
+  if (!allowedHospitals || allowedHospitals.length === 0) return all;
+  return all.filter((i) => allowedHospitals.includes(instanceHospital(i)));
 }
 
 export async function getInstanceById(id: number): Promise<Instance | undefined> {
@@ -510,6 +525,7 @@ export interface LeadWithText {
   type: "user" | "group";
   instanceId: number;
   instanceAlias: string | null;
+  instanceHospital: string | null;
   createdAt: Date;
   messageCount: number;
   allText: string;
@@ -534,6 +550,7 @@ export async function getLeadsWithAggregatedText(
       c.type::text AS type,
       c."instanceId",
       i.alias AS "instanceAlias",
+      i.hospital AS "instanceHospital",
       c."createdAt",
       c."messageCount",
       COALESCE(string_agg(
@@ -544,7 +561,7 @@ export async function getLeadsWithAggregatedText(
     LEFT JOIN instances i ON i.id = c."instanceId"
     LEFT JOIN messages m ON m."contactId" = c.id
     WHERE c."instanceId" IN (${sql.raw(idList)})
-    GROUP BY c.id, c.uid, c.name, c.type, c."instanceId", i.alias, c."createdAt", c."messageCount"
+    GROUP BY c.id, c.uid, c.name, c.type, c."instanceId", i.alias, i.hospital, c."createdAt", c."messageCount"
     ORDER BY c."createdAt" ASC
   `);
 
@@ -556,6 +573,7 @@ export async function getLeadsWithAggregatedText(
     type: r.type as "user" | "group",
     instanceId: Number(r.instanceId),
     instanceAlias: r.instanceAlias ?? null,
+    instanceHospital: r.instanceHospital ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
     messageCount: Number(r.messageCount ?? 0),
     allText: String(r.allText ?? ""),
@@ -616,7 +634,7 @@ export interface DashboardOverview {
 
 export async function getDashboardOverview(
   userId: number,
-  opts?: { dateFrom?: Date; dateTo?: Date; hospitals?: string[]; procedures?: string[] }
+  opts?: { dateFrom?: Date; dateTo?: Date; hospitals?: string[]; procedures?: string[]; visibleInstanceIds?: number[] }
 ): Promise<DashboardOverview> {
   const db = await getDb();
   const emptyResult: DashboardOverview = {
@@ -632,7 +650,11 @@ export async function getDashboardOverview(
   };
   if (!db) return emptyResult;
 
-  const allUserInstances = await db.select().from(instances).where(eq(instances.userId, userId));
+  const allUserInstancesRaw = await db.select().from(instances).where(eq(instances.userId, userId));
+  // Controle de acesso por unidade: restringe ao conjunto visível, quando informado.
+  const allUserInstances = opts?.visibleInstanceIds
+    ? allUserInstancesRaw.filter((i) => opts.visibleInstanceIds!.includes(i.id))
+    : allUserInstancesRaw;
 
   // Filtra instâncias por hospital/procedimento via mapeamento manual (alias → hospital/procedures)
   const { mapInstanceToHospital } = await import("./mediaInvestment");
@@ -918,11 +940,14 @@ export async function getStatusLogs(instanceId: number, limit = 50): Promise<typ
 
 // ─── Realtime Pulse ───────────────────────────────────────────────────────────
 
-export async function getRealtimePulse(userId: number) {
+export async function getRealtimePulse(userId: number, visibleInstanceIds?: number[]) {
   const db = await getDb();
   if (!db) return null;
 
-  const userInstances = await db.select().from(instances).where(eq(instances.userId, userId));
+  const userInstancesRaw = await db.select().from(instances).where(eq(instances.userId, userId));
+  const userInstances = visibleInstanceIds
+    ? userInstancesRaw.filter((i) => visibleInstanceIds.includes(i.id))
+    : userInstancesRaw;
   if (!userInstances.length) return null;
   const instanceIds = userInstances.map((i) => i.id);
 
@@ -1340,7 +1365,7 @@ export interface MessageTypeDistribution {
 
 export async function getOperationOverview(
   userId: number,
-  opts?: { dateFrom?: Date; dateTo?: Date }
+  opts?: { dateFrom?: Date; dateTo?: Date; visibleInstanceIds?: number[] }
 ): Promise<{
   kpis: OperationKPIs;
   queue: QueueItem[];
@@ -1358,7 +1383,10 @@ export async function getOperationOverview(
   const db = await getDb();
   if (!db) return empty;
 
-  const userInsts = await db.select().from(instances).where(eq(instances.userId, userId));
+  const userInstsRaw = await db.select().from(instances).where(eq(instances.userId, userId));
+  const userInsts = opts?.visibleInstanceIds
+    ? userInstsRaw.filter((i) => opts.visibleInstanceIds!.includes(i.id))
+    : userInstsRaw;
   const instIds = userInsts.map((i) => i.id);
   if (!instIds.length) return empty;
 

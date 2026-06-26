@@ -7,6 +7,7 @@
  *
  * Cache em memória de 10 min para não bater no Google a cada request do dashboard.
  */
+import { hospitalOf } from "./hospitalUtils";
 
 const PUB_ID =
   "2PACX-1vR62jBrdVB1lmgM3JvzhoHOND5ehKgw2RwMOUrcL5Vg4yecuBdrls31xhJoOXynfNl3uHswkbczY569";
@@ -259,17 +260,24 @@ interface InstanceMapping {
   procedures: string[];
 }
 
-const INSTANCE_ALIAS_MAP: Array<{ pattern: RegExp; mapping: InstanceMapping }> = [
-  { pattern: /HOPE/i,              mapping: { hospital: "HOPE",        procedures: ["CATARATA", "REFRATIVA"] } },
-  { pattern: /CBV/i,               mapping: { hospital: "CBV",         procedures: ["CATARATA", "REFRATIVA", "PLASTICA"] } },
-  { pattern: /H[\s.]?OLHOS/i,      mapping: { hospital: "HOLHOS",      procedures: ["CATARATA", "REFRATIVA"] } },
-  { pattern: /SANTA\s*LUZIA/i,     mapping: { hospital: "SANTA LUZIA", procedures: ["CATARATA", "REFRATIVA"] } },
-];
+// Procedimentos oferecidos por unidade (usado só pra filtro de procedimento).
+const PROCEDURES_BY_HOSPITAL: Record<string, string[]> = {
+  HOPE: ["CATARATA", "REFRATIVA"],
+  CBV: ["CATARATA", "REFRATIVA", "PLASTICA"],
+  HOLHOS: ["CATARATA", "REFRATIVA"],
+  CRV: ["CATARATA", "REFRATIVA"],
+  "SANTA LUZIA": ["CATARATA", "REFRATIVA"],
+};
 
+/**
+ * Mapeia o alias da instância para hospital + procedimentos.
+ *
+ * A derivação de hospital agora delega para o módulo central `hospitalUtils`
+ * (`hospitalOf`), eliminando a heurística duplicada que existia aqui. O hospital
+ * nunca é null (fallback HOLHOS); o campo permanece tipado como `string | null`
+ * só pra compatibilidade com os consumidores existentes.
+ */
 export function mapInstanceToHospital(alias: string | null | undefined): InstanceMapping {
-  if (!alias) return { hospital: null, procedures: [] };
-  for (const m of INSTANCE_ALIAS_MAP) {
-    if (m.pattern.test(alias)) return m.mapping;
-  }
-  return { hospital: null, procedures: [] };
+  const hospital = hospitalOf(alias);
+  return { hospital, procedures: PROCEDURES_BY_HOSPITAL[hospital] ?? ["CATARATA", "REFRATIVA"] };
 }

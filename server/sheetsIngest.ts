@@ -314,7 +314,7 @@ async function fetchCustosFromMediaCore(): Promise<CustoRow[]> {
   });
 }
 
-export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string } = {}): Promise<InvestmentSummary> {
+export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null } = {}): Promise<InvestmentSummary> {
   // Fonte primária: planilha NUCLEO (Google + Meta + outros, com canal por linha).
   // Fallback: planilha WABOX 2.0 - DATA / CUSTOS (legacy, apenas Google).
   let rows: CustoRow[] | null = await fetchCustosFromMediaCore();
@@ -337,10 +337,15 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
     };
   }
   const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
+  // Allow-list de unidades (controle de acesso). null/[] = sem restrição.
+  const allowSet = opts.allowedHospitals?.length
+    ? new Set(opts.allowedHospitals.map((h) => normalizeHospital(h)))
+    : null;
   const scoped = rows.filter(
     (r) =>
       inRange(r.date, opts.dateFrom, opts.dateTo) &&
-      (hospitalFilter == null || r.hospital === hospitalFilter)
+      (hospitalFilter == null || r.hospital === hospitalFilter) &&
+      (allowSet == null || allowSet.has(r.hospital))
   );
   const total = scoped.reduce((acc, r) => acc + r.cost, 0);
   const dailyMap = new Map<string, number>();
@@ -559,7 +564,7 @@ function aggGroup(leads: PipelineLead[], pick: (l: PipelineLead) => string) {
     .sort((a, b) => b.revenue - a.revenue || b.leads - a.leads);
 }
 
-export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string } = {}): Promise<PipelineSummary> {
+export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null } = {}): Promise<PipelineSummary> {
   const empty: PipelineSummary = {
     source: "unavailable",
     range: { from: opts.dateFrom ?? null, to: opts.dateTo ?? null },
@@ -579,10 +584,15 @@ export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: str
   if (leads === null) return empty;
 
   const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
+  // Allow-list de unidades (controle de acesso). null/[] = sem restrição.
+  const allowSet = opts.allowedHospitals?.length
+    ? new Set(opts.allowedHospitals.map((h) => normalizeHospital(h)))
+    : null;
   const scoped = leads.filter(
     (l) =>
       inRange(l.dateEntered, opts.dateFrom, opts.dateTo) &&
-      (hospitalFilter == null || l.hospital === hospitalFilter)
+      (hospitalFilter == null || l.hospital === hospitalFilter) &&
+      (allowSet == null || allowSet.has(l.hospital))
   );
 
   if (scoped.length === 0) {

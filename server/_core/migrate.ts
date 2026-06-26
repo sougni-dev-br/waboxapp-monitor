@@ -29,6 +29,11 @@ export async function ensureAuthSchema(): Promise<void> {
     await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" varchar(64)`);
     await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" varchar(128)`);
     await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true NOT NULL`);
+    // Controle de acesso por unidade (null = sem restrição, vê tudo)
+    await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "allowedHospitals" jsonb`);
+
+    // 1b. Coluna hospital nas instâncias (null = deriva do alias via fallback)
+    await db.execute(sql`ALTER TABLE "instances" ADD COLUMN IF NOT EXISTS "hospital" varchar(64)`);
 
     // 2. Índice único de username (case-insensitive via LOWER)
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "users_username_unique" ON "users" ("username")`);

@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useMemo, useCallback } from
 export type DateRangePreset = "today" | "7d" | "30d" | "thisMonth" | "lastMonth" | "custom";
 
 /** null = todos os hospitais */
-export type HospitalFilter = null | "HOPE" | "CBV" | "HOLHOS";
+export type HospitalFilter = null | "HOLHOS" | "HOPE" | "CBV" | "CRV" | "SANTA LUZIA";
 
 export interface DateRangeValue {
   from: Date;

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { X, Smartphone, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { HOSPITALS, type Hospital } from "@/lib/hospitals";
 
 interface AddInstanceModalProps {
   onClose: () => void;
@@ -11,6 +12,7 @@ interface AddInstanceModalProps {
 export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
   const [uid, setUid] = useState("");
   const [alias, setAlias] = useState("");
+  const [hospital, setHospital] = useState<Hospital | "">("");
 
   const addMutation = trpc.instances.add.useMutation({
     onSuccess: (data) => {
@@ -27,7 +29,11 @@ export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!uid.trim()) return;
-    addMutation.mutate({ uid: uid.trim(), alias: alias.trim() || undefined });
+    addMutation.mutate({
+      uid: uid.trim(),
+      alias: alias.trim() || undefined,
+      hospital: hospital || undefined,
+    });
   };
 
   return (
@@ -81,6 +87,25 @@ export function AddInstanceModal({ onClose, onAdded }: AddInstanceModalProps) {
               placeholder="Ex: Suporte Principal"
               className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 transition-colors"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Unidade (opcional)
+            </label>
+            <select
+              value={hospital}
+              onChange={(e) => setHospital(e.target.value as Hospital | "")}
+              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 transition-colors bg-white"
+            >
+              <option value="">Derivar do nome do canal</option>
+              {HOSPITALS.map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Define quem pode ver este canal. Se vazio, a unidade é inferida pelo nome.
+            </p>
           </div>
 
           <div className="rounded-xl p-3.5" style={{ background: "var(--sougni-lime-soft)", borderColor: "var(--sougni-lime-dim)" }}>
