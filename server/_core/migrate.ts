@@ -30,11 +30,15 @@ export async function ensureAuthSchema(): Promise<void> {
   // criada. Agora cada passo loga seu erro e os demais continuam.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const step = async (label: string, query: any) => {
+    const t0 = Date.now();
     try {
       await db.execute(query);
     } catch (err) {
       console.error(`[migrate] passo '${label}' falhou:`, err);
     }
+    // Instrumentação: revela qual passo é lento (CREATE em tabela vazia ~ms).
+    const ms = Date.now() - t0;
+    if (ms > 500) console.warn(`[migrate] passo '${label}' levou ${ms}ms`);
   };
 
   // 1. Colunas users (idempotente)

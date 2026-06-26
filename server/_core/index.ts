@@ -331,23 +331,37 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, async () => {
+  // ─── Ordem de boot (CRÍTICO) ───────────────────────────────────────────────
+  // O servidor SÓ pode aceitar requests depois que o schema existe. Antes, o
+  // `server.listen()` era chamado primeiro e as migrações rodavam dentro do
+  // callback — o servidor ficava "live" e respondia tRPC com erro silencioso
+  // (responseBytes=29) enquanto o schema ainda não tinha sido aplicado.
+
+  // 1+2) Migrações + seed de usuários — AGUARDADAS antes de servir requests.
+  const migStart = Date.now();
+  console.log("[boot] aplicando migrations/seed…");
+  try {
+    await ensureAuthSchema();
+    console.log(`[boot] migrations/seed concluídas em ${Date.now() - migStart}ms`);
+  } catch (err) {
+    console.error(`[boot] ensureAuthSchema falhou após ${Date.now() - migStart}ms (servidor continuará rodando):`, err);
+  }
+
+  // 3) ETL Google Sheets → Postgres em background (sem await — não bloqueia).
+  try {
+    const { startSheetsSync } = await import("../sheetsSync");
+    startSheetsSync();
+  } catch (err) {
+    console.error("[boot] startSheetsSync falhou:", err);
+  }
+
+  // 4) Poller de status das instâncias em background.
+  startPoller();
+
+  // 5) Só agora o servidor passa a aceitar requests.
+  server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Aplica migration/seed antes de qualquer trabalho de background
-    try {
-      await ensureAuthSchema();
-    } catch (err) {
-      console.error("[boot] ensureAuthSchema falhou (servidor continuará rodando):", err);
-    }
-    // ETL Google Sheets → Postgres: warm-up imediato + ciclo a cada 10 min.
-    try {
-      const { startSheetsSync } = await import("../sheetsSync");
-      startSheetsSync();
-    } catch (err) {
-      console.error("[boot] startSheetsSync falhou:", err);
-    }
-    startPoller();
-    // Keep-alive ainda útil para evitar timeouts longos em proxies
+    // Keep-alive depende do servidor já estar no ar (self-ping).
     if (process.env.KEEP_ALIVE_ENABLED !== "false") {
       startKeepAlive(port);
     }
