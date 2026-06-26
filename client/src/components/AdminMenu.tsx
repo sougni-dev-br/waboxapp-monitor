@@ -36,7 +36,6 @@ export function AdminMenu() {
         title="Configurações de administração"
       >
         <ShieldCheck className="w-3.5 h-3.5" />
-        <span className="hidden md:inline">Admin</span>
         <ChevronDown className="w-3 h-3 opacity-60" />
       </button>
 

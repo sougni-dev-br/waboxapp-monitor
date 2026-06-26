@@ -11,7 +11,7 @@ import { ConfigModal } from "@/components/ConfigModal";
 import { AddInstanceModal } from "@/components/AddInstanceModal";
 import { LabelsModal } from "@/components/LabelsModal";
 import { GlobalContactsView } from "@/components/GlobalContactsView";
-import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut } from "lucide-react";
+import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut, Settings } from "lucide-react";
 import { OperationalDashV2 as OperationalDash } from "@/components/OperationalDashV2";
 import { MidiaOnView } from "@/components/MidiaOnView";
 import { OperationCenter } from "@/components/OperationCenter";
@@ -20,7 +20,6 @@ import { DateRangePicker } from "@/components/DateRangePicker";
 import { HospitalFilterButtons } from "@/components/HospitalFilter";
 import { AdminMenu } from "@/components/AdminMenu";
 import { usePermissions } from "@/hooks/usePermissions";
-import { format } from "date-fns";
 
 interface Instance {
   id: number;
@@ -293,11 +292,8 @@ export default function Monitor() {
         {/* Direita: status + ações */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {/* Grupo de status — isolado dos botões do filtro por uma divisória */}
-          <div className="flex items-center gap-3 pr-3 border-r border-border">
+          <div className="flex items-center gap-2 pr-3 border-r border-border">
             <StatusSummary instances={instances} />
-            <span className="text-xs text-muted-foreground hidden xl:block tabular">
-              Atualizado às {format(lastUpdated, "HH:mm:ss")}
-            </span>
             <button
               onClick={handleManualRefresh}
               title="Atualizar agora"
@@ -307,33 +303,34 @@ export default function Monitor() {
             </button>
           </div>
 
-          {/* Grupo de ações */}
+          {/* Grupo de ações — apenas ícones (texto no tooltip) */}
           <div className="flex items-center gap-1">
           {can("manageLabels") && (
             <button
               onClick={() => setShowLabels(true)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
+              title="Marcadores"
+              className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
             >
               <Tag className="w-3.5 h-3.5" />
-              Marcadores
             </button>
           )}
 
           {can("manageConfig") && (
             <button
               onClick={() => setShowConfig(true)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-muted"
+              title="Configurações"
+              className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
             >
-              Configurações
+              <Settings className="w-3.5 h-3.5" />
             </button>
           )}
 
           <AdminMenu />
 
-          {/* Identidade do user logado */}
+          {/* Identidade do user logado — só avatar; nome/role no tooltip */}
           {user && (
             <div
-              className="flex items-center gap-2 text-xs text-muted-foreground border-l border-border pl-3 ml-2"
+              className="flex items-center border-l border-border pl-3 ml-2"
               title={`${user.name ?? user.username} · ${user.role === "admin" ? "Administrador" : "Usuário"}`}
             >
               <span
@@ -341,12 +338,6 @@ export default function Monitor() {
               >
                 {(user.name ?? user.username ?? "?").charAt(0)}
               </span>
-              <span className="hidden md:inline text-foreground font-medium">{user.name ?? user.username}</span>
-              {user.role === "admin" && (
-                <span className="hidden lg:inline text-[10px] px-1.5 py-0.5 rounded bg-[#DFFF00]/20 text-[#11131F] font-bold uppercase tracking-wider">
-                  Admin
-                </span>
-              )}
             </div>
           )}
 
@@ -356,10 +347,9 @@ export default function Monitor() {
             }}
             disabled={logoutMutation.isPending}
             title="Sair do painel"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-3 py-1.5 rounded-lg hover:bg-destructive/5 disabled:opacity-50"
+            className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-destructive/5 disabled:opacity-50"
           >
             <LogOut className="w-3.5 h-3.5" />
-            Sair
           </button>
           </div>
         </div>
@@ -483,15 +473,18 @@ function StatusSummary({ instances }: { instances: Instance[] }) {
   const total = instances.length;
   if (total === 0) return null;
   return (
-    <div className="flex items-center gap-3 text-xs">
-      <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+    <div
+      className="flex items-center gap-2 text-xs"
+      title={`${online} canais online${offline > 0 ? ` · ${offline} offline` : ""}`}
+    >
+      <span className="flex items-center gap-1 text-emerald-600 font-semibold tabular">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-        {online} online
+        {online}
       </span>
       {offline > 0 && (
-        <span className="flex items-center gap-1.5 text-red-500 font-medium">
+        <span className="flex items-center gap-1 text-red-500 font-semibold tabular">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block pulse-alert" />
-          {offline} offline
+          {offline}
         </span>
       )}
     </div>
