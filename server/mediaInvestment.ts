@@ -145,7 +145,9 @@ async function fetchSheet(gid: string): Promise<MediaRow[]> {
   return parsed;
 }
 
-async function fetchAllSheets(): Promise<MediaRow[]> {
+// Exportado para o ETL (server/sheetsSync.ts) — busca fresca das 9 abas,
+// sem passar pelo cache de getMediaRows.
+export async function fetchAllSheets(): Promise<MediaRow[]> {
   // Paralelo: 9 fetches simultâneos
   const results = await Promise.all(SHEETS.map((s) => fetchSheet(s.gid)));
   return results.flat();
@@ -218,6 +220,18 @@ export async function getMediaInvestmentSummary(
   filter: MediaFilter,
 ): Promise<MediaInvestmentSummary> {
   const allRows = await getMediaRows();
+  return summarizeMediaRows(allRows, filter);
+}
+
+/**
+ * Agregação pura sobre um conjunto de MediaRow já carregado. Reutilizada tanto
+ * pela leitura direta da planilha (getMediaInvestmentSummary) quanto pela
+ * leitura do banco (getMediaInvestmentFromDb), garantindo interface idêntica.
+ */
+export function summarizeMediaRows(
+  allRows: MediaRow[],
+  filter: MediaFilter,
+): MediaInvestmentSummary {
   const availableHospitals = Array.from(new Set(allRows.map((r) => r.hospital))).sort();
   const availableProcedures = Array.from(new Set(allRows.map((r) => r.procedure))).sort();
 

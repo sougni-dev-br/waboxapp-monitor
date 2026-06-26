@@ -339,6 +339,13 @@ async function startServer() {
     } catch (err) {
       console.error("[boot] ensureAuthSchema falhou (servidor continuará rodando):", err);
     }
+    // ETL Google Sheets → Postgres: warm-up imediato + ciclo a cada 10 min.
+    try {
+      const { startSheetsSync } = await import("../sheetsSync");
+      startSheetsSync();
+    } catch (err) {
+      console.error("[boot] startSheetsSync falhou:", err);
+    }
     startPoller();
     // Keep-alive ainda útil para evitar timeouts longos em proxies
     if (process.env.KEEP_ALIVE_ENABLED !== "false") {

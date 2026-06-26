@@ -26,8 +26,22 @@ import {
   units,
   Unit,
   users,
+  sheetsMediaRows,
+  sheetsCustosRows,
+  sheetsPipelineLeads,
+  sheetsSyncLog,
 } from "../drizzle/schema";
 import { instanceHospital } from "./hospitalUtils";
+import { summarizeMediaRows, type MediaRow, type MediaFilter, type MediaInvestmentSummary } from "./mediaInvestment";
+import {
+  summarizeCustos,
+  summarizePipeline,
+  mediaRowToCusto,
+  type CustoRow,
+  type PipelineLead,
+  type InvestmentSummary,
+  type PipelineSummary,
+} from "./sheetsIngest";
 
 const { Pool } = pg;
 
@@ -1759,4 +1773,101 @@ export async function getOperationOverview(
   const dowVolume = Array.from(dowMap.entries()).map(([dow, total]) => ({ dow, label: dowLabels[dow] ?? "?", total }));
 
   return { kpis, queue, operators, messageTypes, hourlyVolume, dowVolume };
+}
+
+// ─── ETL: leitura das tabelas espelho (sheets_*) ───────────────────────────────
+//
+// Retornam `null` quando a tabela está vazia (primeiro boot antes do sync) —
+// o router usa esse null pra cair no fallback de leitura direta da planilha.
+
+type InvestmentDbOpts = { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null };
+
+/** Investimento a partir do banco. Prioriza sheets_media_rows (NUCLEO, igual à
+ *  leitura direta), com fallback para sheets_custos_rows. */
+export async function getInvestmentFromDb(opts: InvestmentDbOpts = {}): Promise<InvestmentSummary | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const media = await db.select().from(sheetsMediaRows);
+  let custoRows: CustoRow[];
+  if (media.length > 0) {
+    const mediaRows: MediaRow[] = media.map(dbRowToMediaRow);
+    custoRows = mediaRows.map(mediaRowToCusto);
+  } else {
+    const custos = await db.select().from(sheetsCustosRows);
+    if (custos.length === 0) return null; // vazio → fallback planilha
+    custoRows = custos.map((r) => ({
+      date: r.date,
+      channel: r.channel ?? "—",
+      channelRaw: r.channel ?? "—",
+      campaign: r.campaign ?? "—",
+      hospital: r.hospital ?? "—",
+      cost: Number(r.cost ?? 0),
+      note: r.note ?? "",
+    }));
+  }
+  return summarizeCustos(custoRows, opts);
+}
+
+/** Investimento de mídia detalhado (NUCLEO) a partir do banco. */
+export async function getMediaInvestmentFromDb(filter: MediaFilter): Promise<MediaInvestmentSummary | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(sheetsMediaRows);
+  if (rows.length === 0) return null; // vazio → fallback planilha
+  return summarizeMediaRows(rows.map(dbRowToMediaRow), filter);
+}
+
+/** Funil (PIPELINE) a partir do banco. */
+export async function getPipelineFromDb(opts: InvestmentDbOpts = {}): Promise<PipelineSummary | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(sheetsPipelineLeads);
+  if (rows.length === 0) return null; // vazio → fallback planilha
+  const leads: PipelineLead[] = rows.map((r) => ({
+    dateEntered: r.dateEntered,
+    phone: r.phone,
+    name: r.name ?? "",
+    hospital: r.hospital ?? "—",
+    procedure: r.procedure ?? "—",
+    channel: r.channel ?? "—",
+    campaign: r.campaign ?? "—",
+    dateScheduled: r.dateScheduled ?? null,
+    dateConsultation: r.dateConsultation ?? null,
+    dateSurgery: r.dateSurgery ?? null,
+    surgeryValue: Number(r.surgeryValue ?? 0),
+    lossReason: r.lossReason ?? "",
+    status: (r.status as PipelineLead["status"]) ?? "—",
+  }));
+  return summarizePipeline(leads, opts);
+}
+
+/** Converte uma linha de sheets_media_rows (numeric vem como string) em MediaRow. */
+function dbRowToMediaRow(r: typeof sheetsMediaRows.$inferSelect): MediaRow {
+  return {
+    date: new Date(r.date + "T00:00:00"),
+    impressions: r.impressions ?? 0,
+    clicks: r.clicks ?? 0,
+    ctr: r.ctr != null ? Number(r.ctr) : 0,
+    cost: r.cost != null ? Number(r.cost) : 0,
+    cpc: r.cpc != null ? Number(r.cpc) : NaN,
+    procedure: r.procedure,
+    hospital: r.hospital,
+    channel: r.channel,
+  };
+}
+
+/** Última entrada do log de sync por source (para o endpoint dashboard.syncStatus). */
+export async function getLatestSyncLog(): Promise<Array<typeof sheetsSyncLog.$inferSelect>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(sheetsSyncLog).orderBy(desc(sheetsSyncLog.startedAt));
+  const seen = new Set<string>();
+  const latest: Array<typeof sheetsSyncLog.$inferSelect> = [];
+  for (const r of rows) {
+    if (seen.has(r.source)) continue;
+    seen.add(r.source);
+    latest.push(r);
+  }
+  return latest;
 }

@@ -90,7 +90,73 @@ export async function ensureAuthSchema(): Promise<void> {
     ON CONFLICT ("name") DO NOTHING
   `);
 
-  console.log("[migrate] Schema de auth + automation + units verificado");
+  // 5. Tabelas do ETL de planilhas (sheets_* — espelho Google Sheets → Postgres)
+  await step("sheets_media_rows", sql`
+    CREATE TABLE IF NOT EXISTS "sheets_media_rows" (
+      "id" serial PRIMARY KEY,
+      "date" varchar(10) NOT NULL,
+      "hospital" varchar(64) NOT NULL,
+      "procedure" varchar(64) NOT NULL,
+      "channel" varchar(32) DEFAULT 'GOOGLE' NOT NULL,
+      "impressions" integer DEFAULT 0,
+      "clicks" integer DEFAULT 0,
+      "ctr" numeric(8,6) DEFAULT 0,
+      "cost" numeric(12,2) NOT NULL,
+      "cpc" numeric(10,4) DEFAULT 0,
+      "syncedAt" timestamp DEFAULT now()
+    )
+  `);
+  await step("sheets_media_rows_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS "sheets_media_rows_unique" ON "sheets_media_rows" ("date","hospital","procedure","channel")`);
+
+  await step("sheets_custos_rows", sql`
+    CREATE TABLE IF NOT EXISTS "sheets_custos_rows" (
+      "id" serial PRIMARY KEY,
+      "date" varchar(10) NOT NULL,
+      "channel" varchar(32),
+      "campaign" varchar(256),
+      "hospital" varchar(64),
+      "cost" numeric(12,2) NOT NULL,
+      "note" varchar(512),
+      "syncedAt" timestamp DEFAULT now()
+    )
+  `);
+  await step("sheets_custos_rows_date_hospital_idx", sql`CREATE INDEX IF NOT EXISTS "sheets_custos_rows_date_hospital_idx" ON "sheets_custos_rows" ("date","hospital")`);
+  await step("sheets_custos_rows_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS "sheets_custos_rows_unique" ON "sheets_custos_rows" ("date","hospital","channel","campaign")`);
+
+  await step("sheets_pipeline_leads", sql`
+    CREATE TABLE IF NOT EXISTS "sheets_pipeline_leads" (
+      "id" serial PRIMARY KEY,
+      "dateEntered" varchar(10) NOT NULL,
+      "phone" varchar(32) NOT NULL,
+      "name" varchar(256),
+      "hospital" varchar(64),
+      "procedure" varchar(128),
+      "channel" varchar(128),
+      "campaign" varchar(256),
+      "dateScheduled" varchar(10),
+      "dateConsultation" varchar(10),
+      "dateSurgery" varchar(10),
+      "surgeryValue" numeric(12,2) DEFAULT 0,
+      "lossReason" varchar(512),
+      "status" varchar(64),
+      "syncedAt" timestamp DEFAULT now()
+    )
+  `);
+  await step("sheets_pipeline_leads_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS "sheets_pipeline_leads_unique" ON "sheets_pipeline_leads" ("dateEntered","phone")`);
+
+  await step("sheets_sync_log", sql`
+    CREATE TABLE IF NOT EXISTS "sheets_sync_log" (
+      "id" serial PRIMARY KEY,
+      "source" varchar(32) NOT NULL,
+      "status" varchar(16) NOT NULL,
+      "rowsUpserted" integer DEFAULT 0,
+      "errorMessage" text,
+      "startedAt" timestamp DEFAULT now(),
+      "finishedAt" timestamp
+    )
+  `);
+
+  console.log("[migrate] Schema de auth + automation + units + sheets verificado");
 
   // 3. Seed dos usuários iniciais (idempotente — só atualiza se não tiver passwordHash)
   for (const seed of SEED_USERS) {

@@ -34,6 +34,10 @@ import {
   updateUnit,
   deleteUnit,
   getUnitLinkCounts,
+  getInvestmentFromDb,
+  getMediaInvestmentFromDb,
+  getPipelineFromDb,
+  getLatestSyncLog,
   getLabelRules,
   getLabels,
   getLeadsWithAggregatedText,
@@ -51,6 +55,7 @@ import { getMediaInvestmentSummary } from "./mediaInvestment";
 import { nanoid } from "nanoid";
 import { findUserByUsername, verifyPassword, touchLastSignedIn, hashPassword, PERMISSIONS } from "./auth";
 import { getInvestmentSummary, getPipelineSummary } from "./sheetsIngest";
+import { syncAllSheets } from "./sheetsSync";
 import { HOSPITALS, instanceHospital, getHospitalNames } from "./hospitalUtils";
 
 // ID fixo do painel (dono dos dados — instâncias/contatos/mensagens)
@@ -1012,12 +1017,15 @@ export const appRouter = router({
         const scope = await resolveScope(ctx.user);
         const dateFrom = input?.dateFrom ? new Date(input.dateFrom) : undefined;
         const dateTo = input?.dateTo ? new Date(input.dateTo + "T23:59:59.999") : undefined;
-        return getMediaInvestmentSummary({
+        const filter = {
           dateFrom,
           dateTo,
           hospitals: clampHospitals(input?.hospitals, scope.allowedHospitals),
           procedures: input?.procedures,
-        });
+        };
+        // Fonte primária: banco (ETL). Fallback: leitura direta da planilha.
+        const fromDb = await getMediaInvestmentFromDb(filter);
+        return fromDb ?? getMediaInvestmentSummary(filter);
       }),
 
     /**
@@ -1034,12 +1042,14 @@ export const appRouter = router({
       )
       .query(async ({ input, ctx }) => {
         const scope = await resolveScope(ctx.user);
-        return getInvestmentSummary({
+        const opts = {
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
           hospital: clampHospital(input?.hospital, scope.allowedHospitals),
           allowedHospitals: scope.allowedHospitals,
-        });
+        };
+        const fromDb = await getInvestmentFromDb(opts);
+        return fromDb ?? getInvestmentSummary(opts);
       }),
 
     /**
@@ -1056,12 +1066,14 @@ export const appRouter = router({
       )
       .query(async ({ input, ctx }) => {
         const scope = await resolveScope(ctx.user);
-        return getPipelineSummary({
+        const opts = {
           dateFrom: input?.dateFrom,
           dateTo: input?.dateTo,
           hospital: clampHospital(input?.hospital, scope.allowedHospitals),
           allowedHospitals: scope.allowedHospitals,
-        });
+        };
+        const fromDb = await getPipelineFromDb(opts);
+        return fromDb ?? getPipelineSummary(opts);
       }),
 
     /**
@@ -1129,6 +1141,17 @@ export const appRouter = router({
         },
         leads: out,
       };
+    }),
+
+    /** Status da última sincronização de cada fonte (media/custos/pipeline). */
+    syncStatus: protectedProcedure.query(async () => {
+      return getLatestSyncLog();
+    }),
+
+    /** Dispara o ETL manualmente (admin). Retorna o resultado por fonte. */
+    triggerSync: adminProcedure.mutation(async () => {
+      const results = await syncAllSheets();
+      return { results };
     }),
   }),
 

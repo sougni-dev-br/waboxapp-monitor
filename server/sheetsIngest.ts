@@ -10,6 +10,8 @@
  * cache local de 60s para reduzir o número de fetches.
  */
 
+import type { MediaRow } from "./mediaInvestment";
+
 export interface CustoRow {
   /** Date in YYYY-MM-DD (parsed from BR or ISO formats). */
   date: string;
@@ -320,23 +322,30 @@ export interface InvestmentSummary {
  * A planilha "WABOX 2.0 - DATA / CUSTOS" original (lida por `fetchCustos`)
  * só carrega Google e é mantida como fallback.
  */
+/**
+ * Converte uma MediaRow (NUCLEO) no formato CustoRow agnóstico. Exportada para
+ * reuso na leitura do banco (db.getInvestmentFromDb), evitando divergência de
+ * regra entre os caminhos planilha e banco.
+ */
+export function mediaRowToCusto(r: MediaRow): CustoRow {
+  const d = r.date;
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return {
+    date: dateStr,
+    channel: normalizeChannel(r.channel),
+    channelRaw: r.channel || "—",
+    // Sem coluna campanha na NUCLEO — usamos hospital+procedimento como rótulo.
+    campaign: r.procedure ? `${r.hospital} · ${r.procedure}` : (r.hospital || "—"),
+    hospital: normalizeHospital(r.hospital),
+    cost: Number.isFinite(r.cost) ? r.cost : 0,
+    note: "",
+  };
+}
+
 async function fetchCustosFromMediaCore(): Promise<CustoRow[]> {
   const { getMediaRows } = await import("./mediaInvestment");
   const media = await getMediaRows();
-  return media.map((r): CustoRow => {
-    const d = r.date;
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return {
-      date: dateStr,
-      channel: normalizeChannel(r.channel),
-      channelRaw: r.channel || "—",
-      // Sem coluna campanha na NUCLEO — usamos hospital+procedimento como rótulo.
-      campaign: r.procedure ? `${r.hospital} · ${r.procedure}` : (r.hospital || "—"),
-      hospital: normalizeHospital(r.hospital),
-      cost: Number.isFinite(r.cost) ? r.cost : 0,
-      note: "",
-    };
-  });
+  return media.map(mediaRowToCusto);
 }
 
 export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null } = {}): Promise<InvestmentSummary> {
@@ -361,6 +370,17 @@ export async function getInvestmentSummary(opts: { dateFrom?: string; dateTo?: s
       dailyByChannel: [],
     };
   }
+  return summarizeCustos(rows, opts);
+}
+
+/**
+ * Agregação pura sobre CustoRow[] já carregado. Reutilizada pela leitura direta
+ * da planilha (getInvestmentSummary) e pela leitura do banco (getInvestmentFromDb).
+ */
+export function summarizeCustos(
+  rows: CustoRow[],
+  opts: { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null } = {},
+): InvestmentSummary {
   const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
   // Allow-list de unidades (controle de acesso). null/[] = sem restrição.
   const allowSet = opts.allowedHospitals?.length
@@ -590,8 +610,36 @@ function aggGroup(leads: PipelineLead[], pick: (l: PipelineLead) => string) {
 }
 
 export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null } = {}): Promise<PipelineSummary> {
+  const leads = await fetchPipelineLeads();
+  if (leads === null) {
+    return {
+      source: "unavailable",
+      range: { from: opts.dateFrom ?? null, to: opts.dateTo ?? null },
+      funnel: { leads: 0, scheduled: 0, consulted: 0, surgeries: 0, lost: 0 },
+      conversion: { leadToScheduled: 0, scheduledToConsulted: 0, consultedToSurgery: 0, leadToSurgery: 0 },
+      revenue: 0,
+      averageTicket: 0,
+      funnelTime: { leadToScheduledDays: null, scheduledToConsultedDays: null, consultedToSurgeryDays: null },
+      byHospital: [],
+      byChannel: [],
+      byProcedure: [],
+      lossReasons: [],
+      dailyLeads: [],
+    };
+  }
+  return summarizePipeline(leads, opts);
+}
+
+/**
+ * Agregação pura sobre PipelineLead[] já carregado. Reutilizada pela leitura
+ * direta da planilha (getPipelineSummary) e pela leitura do banco (getPipelineFromDb).
+ */
+export function summarizePipeline(
+  leads: PipelineLead[],
+  opts: { dateFrom?: string; dateTo?: string; hospital?: string; allowedHospitals?: string[] | null } = {},
+): PipelineSummary {
   const empty: PipelineSummary = {
-    source: "unavailable",
+    source: "empty",
     range: { from: opts.dateFrom ?? null, to: opts.dateTo ?? null },
     funnel: { leads: 0, scheduled: 0, consulted: 0, surgeries: 0, lost: 0 },
     conversion: { leadToScheduled: 0, scheduledToConsulted: 0, consultedToSurgery: 0, leadToSurgery: 0 },
@@ -604,9 +652,6 @@ export async function getPipelineSummary(opts: { dateFrom?: string; dateTo?: str
     lossReasons: [],
     dailyLeads: [],
   };
-
-  const leads = await fetchPipelineLeads();
-  if (leads === null) return empty;
 
   const hospitalFilter = opts.hospital ? normalizeHospital(opts.hospital) : null;
   // Allow-list de unidades (controle de acesso). null/[] = sem restrição.

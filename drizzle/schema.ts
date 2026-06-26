@@ -7,6 +7,7 @@ import {
   varchar,
   text,
   boolean,
+  numeric,
   timestamp,
   jsonb,
   uniqueIndex,
@@ -305,3 +306,94 @@ export const units = pgTable(
 
 export type Unit = typeof units.$inferSelect;
 export type InsertUnit = typeof units.$inferInsert;
+
+// ─── ETL Google Sheets → Postgres ──────────────────────────────────────────────
+//
+// Tabelas espelho das planilhas. Populadas periodicamente por server/sheetsSync.ts.
+// O dashboard lê daqui; a leitura direta das planilhas (sheetsIngest/mediaInvestment)
+// fica como fallback quando estas tabelas ainda estão vazias.
+
+/** NUCLEO — investimento de mídia por hospital×procedimento×canal×dia. */
+export const sheetsMediaRows = pgTable(
+  "sheets_media_rows",
+  {
+    id: serial("id").primaryKey(),
+    date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+    hospital: varchar("hospital", { length: 64 }).notNull(),
+    procedure: varchar("procedure", { length: 64 }).notNull(),
+    channel: varchar("channel", { length: 32 }).notNull().default("GOOGLE"),
+    impressions: integer("impressions").default(0),
+    clicks: integer("clicks").default(0),
+    ctr: numeric("ctr", { precision: 8, scale: 6 }).default("0"),
+    cost: numeric("cost", { precision: 12, scale: 2 }).notNull(),
+    cpc: numeric("cpc", { precision: 10, scale: 4 }).default("0"),
+    syncedAt: timestamp("syncedAt").defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("sheets_media_rows_unique").on(t.date, t.hospital, t.procedure, t.channel),
+  })
+);
+export type SheetsMediaRow = typeof sheetsMediaRows.$inferSelect;
+export type InsertSheetsMediaRow = typeof sheetsMediaRows.$inferInsert;
+
+/** Aba CUSTOS (legado, só Google) — fallback de investimento. */
+export const sheetsCustosRows = pgTable(
+  "sheets_custos_rows",
+  {
+    id: serial("id").primaryKey(),
+    date: varchar("date", { length: 10 }).notNull(),
+    channel: varchar("channel", { length: 32 }),
+    campaign: varchar("campaign", { length: 256 }),
+    hospital: varchar("hospital", { length: 64 }),
+    cost: numeric("cost", { precision: 12, scale: 2 }).notNull(),
+    note: varchar("note", { length: 512 }),
+    syncedAt: timestamp("syncedAt").defaultNow(),
+  },
+  (t) => ({
+    dateHospitalIdx: index("sheets_custos_rows_date_hospital_idx").on(t.date, t.hospital),
+    // Chave de upsert (campos coalescidos para "—" no sync, nunca null).
+    uniq: uniqueIndex("sheets_custos_rows_unique").on(t.date, t.hospital, t.channel, t.campaign),
+  })
+);
+export type SheetsCustosRow = typeof sheetsCustosRows.$inferSelect;
+export type InsertSheetsCustosRow = typeof sheetsCustosRows.$inferInsert;
+
+/** Aba PIPELINE — funil de leads. Chave natural (dateEntered, phone). */
+export const sheetsPipelineLeads = pgTable(
+  "sheets_pipeline_leads",
+  {
+    id: serial("id").primaryKey(),
+    dateEntered: varchar("dateEntered", { length: 10 }).notNull(),
+    phone: varchar("phone", { length: 32 }).notNull(),
+    name: varchar("name", { length: 256 }),
+    hospital: varchar("hospital", { length: 64 }),
+    procedure: varchar("procedure", { length: 128 }),
+    channel: varchar("channel", { length: 128 }),
+    campaign: varchar("campaign", { length: 256 }),
+    dateScheduled: varchar("dateScheduled", { length: 10 }),
+    dateConsultation: varchar("dateConsultation", { length: 10 }),
+    dateSurgery: varchar("dateSurgery", { length: 10 }),
+    surgeryValue: numeric("surgeryValue", { precision: 12, scale: 2 }).default("0"),
+    lossReason: varchar("lossReason", { length: 512 }),
+    status: varchar("status", { length: 64 }),
+    syncedAt: timestamp("syncedAt").defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("sheets_pipeline_leads_unique").on(t.dateEntered, t.phone),
+  })
+);
+export type SheetsPipelineLead = typeof sheetsPipelineLeads.$inferSelect;
+export type InsertSheetsPipelineLead = typeof sheetsPipelineLeads.$inferInsert;
+
+/** Log de sincronização — uma linha por execução de cada source. */
+export const sheetsSyncLog = pgTable("sheets_sync_log", {
+  id: serial("id").primaryKey(),
+  source: varchar("source", { length: 32 }).notNull(), // media | custos | pipeline
+  status: varchar("status", { length: 16 }).notNull(), // success | error | running
+  rowsUpserted: integer("rowsUpserted").default(0),
+  errorMessage: text("errorMessage"),
+  startedAt: timestamp("startedAt").defaultNow(),
+  finishedAt: timestamp("finishedAt"),
+});
+export type SheetsSyncLog = typeof sheetsSyncLog.$inferSelect;
+export type InsertSheetsSyncLog = typeof sheetsSyncLog.$inferInsert;
