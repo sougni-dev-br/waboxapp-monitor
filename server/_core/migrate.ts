@@ -41,15 +41,40 @@ export async function ensureAuthSchema(): Promise<void> {
     if (ms > 500) console.warn(`[migrate] passo '${label}' levou ${ms}ms`);
   };
 
-  // 1. Colunas users (idempotente)
-  await step("users.username", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" varchar(64)`);
-  await step("users.passwordHash", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" varchar(128)`);
-  await step("users.active", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true NOT NULL`);
+  /**
+   * Adiciona uma coluna SÓ se ela ainda não existir.
+   *
+   * `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` adquire ACCESS EXCLUSIVE LOCK na
+   * tabela em TODO boot, mesmo quando a coluna já existe — e fica esperando atrás
+   * de escritas concorrentes (poller/webhook em `instances`), o que causou 163s
+   * de bloqueio. Consultar o information_schema antes é um catalog read barato,
+   * sem lock na tabela, e pula o ALTER completamente quando a coluna já existe.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const addColumn = async (label: string, table: string, column: string, ddl: any) => {
+    try {
+      const res = await db.execute(sql`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = ${table} AND column_name = ${column}
+        LIMIT 1
+      `);
+      const rows = (res as unknown as { rows: unknown[] }).rows ?? [];
+      if (rows.length > 0) return; // já existe → não toca na tabela (sem lock)
+    } catch (err) {
+      console.error(`[migrate] checagem de coluna '${label}' falhou, tentando ALTER:`, err);
+    }
+    await step(label, ddl);
+  };
+
+  // 1. Colunas users (só adiciona se ausente — sem lock quando já existe)
+  await addColumn("users.username", "users", "username", sql`ALTER TABLE "users" ADD COLUMN "username" varchar(64)`);
+  await addColumn("users.passwordHash", "users", "passwordHash", sql`ALTER TABLE "users" ADD COLUMN "passwordHash" varchar(128)`);
+  await addColumn("users.active", "users", "active", sql`ALTER TABLE "users" ADD COLUMN "active" boolean DEFAULT true NOT NULL`);
   // Controle de acesso por unidade (null = sem restrição, vê tudo)
-  await step("users.allowedHospitals", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "allowedHospitals" jsonb`);
+  await addColumn("users.allowedHospitals", "users", "allowedHospitals", sql`ALTER TABLE "users" ADD COLUMN "allowedHospitals" jsonb`);
 
   // 1b. Coluna hospital nas instâncias (null = deriva do alias via fallback)
-  await step("instances.hospital", sql`ALTER TABLE "instances" ADD COLUMN IF NOT EXISTS "hospital" varchar(64)`);
+  await addColumn("instances.hospital", "instances", "hospital", sql`ALTER TABLE "instances" ADD COLUMN "hospital" varchar(64)`);
 
   // 2. Índice único de username
   await step("users_username_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS "users_username_unique" ON "users" ("username")`);
