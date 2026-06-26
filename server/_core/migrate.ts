@@ -24,65 +24,73 @@ export async function ensureAuthSchema(): Promise<void> {
     return;
   }
 
-  try {
-    // 1. Adicionar colunas users (idempotente)
-    await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" varchar(64)`);
-    await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" varchar(128)`);
-    await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true NOT NULL`);
-    // Controle de acesso por unidade (null = sem restrição, vê tudo)
-    await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "allowedHospitals" jsonb`);
+  // Cada passo roda de forma INDEPENDENTE e idempotente. Antes, um único
+  // statement com falha (ex.: índice único com duplicatas) abortava todo o
+  // resto via try/catch + rethrow — deixando, p.ex., a tabela `units` sem ser
+  // criada. Agora cada passo loga seu erro e os demais continuam.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const step = async (label: string, query: any) => {
+    try {
+      await db.execute(query);
+    } catch (err) {
+      console.error(`[migrate] passo '${label}' falhou:`, err);
+    }
+  };
 
-    // 1b. Coluna hospital nas instâncias (null = deriva do alias via fallback)
-    await db.execute(sql`ALTER TABLE "instances" ADD COLUMN IF NOT EXISTS "hospital" varchar(64)`);
+  // 1. Colunas users (idempotente)
+  await step("users.username", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" varchar(64)`);
+  await step("users.passwordHash", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" varchar(128)`);
+  await step("users.active", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "active" boolean DEFAULT true NOT NULL`);
+  // Controle de acesso por unidade (null = sem restrição, vê tudo)
+  await step("users.allowedHospitals", sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "allowedHospitals" jsonb`);
 
-    // 2. Índice único de username (case-insensitive via LOWER)
-    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "users_username_unique" ON "users" ("username")`);
+  // 1b. Coluna hospital nas instâncias (null = deriva do alias via fallback)
+  await step("instances.hospital", sql`ALTER TABLE "instances" ADD COLUMN IF NOT EXISTS "hospital" varchar(64)`);
 
-    // 3. Tabela automation_rules
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS "automation_rules" (
-        "id" serial PRIMARY KEY,
-        "userId" integer NOT NULL,
-        "name" varchar(128) NOT NULL,
-        "trigger" varchar(64) NOT NULL,
-        "hospital" varchar(64),
-        "keywords" text,
-        "delayMinutes" integer DEFAULT 0 NOT NULL,
-        "message" text NOT NULL,
-        "active" boolean DEFAULT true NOT NULL,
-        "createdAt" timestamp DEFAULT now() NOT NULL,
-        "updatedAt" timestamp DEFAULT now() NOT NULL
-      )
-    `);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS "automation_rules_userId_idx" ON "automation_rules" ("userId")`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS "automation_rules_trigger_idx" ON "automation_rules" ("trigger")`);
+  // 2. Índice único de username
+  await step("users_username_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS "users_username_unique" ON "users" ("username")`);
 
-    // 4. Tabela units (unidades/hospitais) + seed idempotente das 5 unidades atuais
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS "units" (
-        "id" serial PRIMARY KEY,
-        "name" varchar(64) NOT NULL,
-        "label" varchar(128) NOT NULL,
-        "active" boolean DEFAULT true NOT NULL,
-        "createdAt" timestamp DEFAULT now() NOT NULL
-      )
-    `);
-    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS "units_name_unique" ON "units" ("name")`);
-    await db.execute(sql`
-      INSERT INTO "units" ("name", "label") VALUES
-        ('HOLHOS', 'H.Olhos'),
-        ('HOPE', 'Hope'),
-        ('CBV', 'CBV'),
-        ('CRV', 'CRV'),
-        ('SANTA LUZIA', 'Santa Luzia')
-      ON CONFLICT ("name") DO NOTHING
-    `);
+  // 3. Tabela automation_rules
+  await step("automation_rules", sql`
+    CREATE TABLE IF NOT EXISTS "automation_rules" (
+      "id" serial PRIMARY KEY,
+      "userId" integer NOT NULL,
+      "name" varchar(128) NOT NULL,
+      "trigger" varchar(64) NOT NULL,
+      "hospital" varchar(64),
+      "keywords" text,
+      "delayMinutes" integer DEFAULT 0 NOT NULL,
+      "message" text NOT NULL,
+      "active" boolean DEFAULT true NOT NULL,
+      "createdAt" timestamp DEFAULT now() NOT NULL,
+      "updatedAt" timestamp DEFAULT now() NOT NULL
+    )
+  `);
+  await step("automation_rules_userId_idx", sql`CREATE INDEX IF NOT EXISTS "automation_rules_userId_idx" ON "automation_rules" ("userId")`);
+  await step("automation_rules_trigger_idx", sql`CREATE INDEX IF NOT EXISTS "automation_rules_trigger_idx" ON "automation_rules" ("trigger")`);
 
-    console.log("[migrate] Schema de auth + automation + units verificado");
-  } catch (err) {
-    console.error("[migrate] Falha ao aplicar ensureAuthSchema:", err);
-    throw err;
-  }
+  // 4. Tabela units (unidades/hospitais) + seed idempotente das 5 unidades atuais
+  await step("units.table", sql`
+    CREATE TABLE IF NOT EXISTS "units" (
+      "id" serial PRIMARY KEY,
+      "name" varchar(64) NOT NULL,
+      "label" varchar(128) NOT NULL,
+      "active" boolean DEFAULT true NOT NULL,
+      "createdAt" timestamp DEFAULT now() NOT NULL
+    )
+  `);
+  await step("units_name_unique", sql`CREATE UNIQUE INDEX IF NOT EXISTS "units_name_unique" ON "units" ("name")`);
+  await step("units.seed", sql`
+    INSERT INTO "units" ("name", "label") VALUES
+      ('HOLHOS', 'H.Olhos'),
+      ('HOPE', 'Hope'),
+      ('CBV', 'CBV'),
+      ('CRV', 'CRV'),
+      ('SANTA LUZIA', 'Santa Luzia')
+    ON CONFLICT ("name") DO NOTHING
+  `);
+
+  console.log("[migrate] Schema de auth + automation + units verificado");
 
   // 3. Seed dos usuários iniciais (idempotente — só atualiza se não tiver passwordHash)
   for (const seed of SEED_USERS) {

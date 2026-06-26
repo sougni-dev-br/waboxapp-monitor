@@ -70,12 +70,27 @@ const OWNER_ID = 1;
 async function resolveScope(
   user: { role: string; allowedHospitals?: string[] | null },
 ): Promise<{ instanceIds?: number[]; allowedHospitals: string[] | null }> {
-  const allowed = user.allowedHospitals ?? null;
-  if (user.role === "admin" || !allowed || allowed.length === 0) {
+  const allowed = userAllowedHospitals(user);
+  if (!allowed || allowed.length === 0) {
     return { instanceIds: undefined, allowedHospitals: null };
   }
   const visible = await getVisibleInstances(OWNER_ID, allowed);
   return { instanceIds: visible.map((i) => i.id), allowedHospitals: allowed };
+}
+
+/**
+ * Restrição de unidades EFETIVA de um usuário, respeitando o role.
+ * Admin SEMPRE vê tudo (null), independentemente do que houver em
+ * `allowedHospitals`. Também normaliza array vazio / valor inválido para null.
+ *
+ * Bug corrigido: as chamadas diretas a `getVisibleInstances` passavam
+ * `ctx.user.allowedHospitals` cru — um admin com `allowedHospitals` preenchido
+ * tinha os próprios canais filtrados (sidebar/contatos vaziam).
+ */
+function userAllowedHospitals(user: { role: string; allowedHospitals?: string[] | null }): string[] | null {
+  if (user.role === "admin") return null;
+  const a = user.allowedHospitals;
+  return Array.isArray(a) && a.length > 0 ? a : null;
 }
 
 /** Restringe um filtro de hospitais (multi) ao conjunto permitido do usuário. */
@@ -379,9 +394,16 @@ export const appRouter = router({
   units: router({
     /** Admin vê todas (ativas + inativas); user vê só as ativas. */
     list: protectedProcedure.query(async ({ ctx }) => {
-      const all = await getUnits();
-      if (ctx.user.role === "admin") return all;
-      return all.filter((u) => u.active);
+      try {
+        const all = await getUnits();
+        // LOG TEMPORÁRIO — diagnóstico de "Nenhuma unidade cadastrada"
+        console.log(`[units.list] role=${ctx.user.role} retornou ${all.length} unidade(s)`);
+        if (ctx.user.role === "admin") return all;
+        return all.filter((u) => u.active);
+      } catch (err) {
+        console.error("[units.list] erro:", err);
+        throw err;
+      }
     }),
 
     /** Só unidades ativas — usado pelos selects de cadastro e pelo filtro. */
@@ -462,7 +484,13 @@ export const appRouter = router({
   // ─── Instances ───────────────────────────────────────────────────────────────
   instances: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      return getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+      try {
+        return await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
+      } catch (err) {
+        // LOG TEMPORÁRIO — diagnóstico de canais sumindo da sidebar
+        console.error("[instances.list] erro:", { role: ctx.user.role, allowed: ctx.user.allowedHospitals, err });
+        throw err;
+      }
     }),
 
     add: protectedProcedure
@@ -600,7 +628,7 @@ export const appRouter = router({
     statusLogs: protectedProcedure
       .input(z.object({ instanceId: z.number(), limit: z.number().optional() }))
       .query(async ({ input, ctx }) => {
-        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+        const allInstances = await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         return getStatusLogs(input.instanceId, input.limit ?? 50);
@@ -648,7 +676,7 @@ export const appRouter = router({
         const host = (ctx.req.headers["x-forwarded-host"] as string) ?? ctx.req.headers.host ?? "monitor.sougni.com";
         const expectedHookUrl = `${proto}://${host}/api/webhook/waboxapp`;
 
-        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+        const allInstances = await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
 
         // Pra cada instância online com token, busca o hook_url atual no WaboxApp
         const instances = await Promise.all(allInstances.map(async (inst) => {
@@ -689,7 +717,7 @@ export const appRouter = router({
     dailyContacts: protectedProcedure
       .input(z.object({ instanceId: z.number(), days: z.number().optional() }))
       .query(async ({ input, ctx }) => {
-        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+        const allInstances = await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         return getDailyContactStats(input.instanceId, input.days ?? 30);
@@ -836,7 +864,7 @@ export const appRouter = router({
         })
       )
       .query(async ({ input, ctx }) => {
-        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+        const allInstances = await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
         const instance = allInstances.find((i) => i.id === input.instanceId);
         if (!instance) throw new TRPCError({ code: "NOT_FOUND" });
         const rows = await getContacts(input.instanceId, {
@@ -863,7 +891,7 @@ export const appRouter = router({
         })
       )
       .query(async ({ input, ctx }) => {
-        const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+        const allInstances = await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
         const instanceIds = allInstances.map((i) => i.id);
         const rows = await getAllContacts(instanceIds, {
           dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
@@ -1047,7 +1075,7 @@ export const appRouter = router({
      * - Inclui todos (groups e users) — você filtra depois na planilha
      */
     exportLeadsForPipeline: protectedProcedure.query(async ({ ctx }) => {
-      const allInstances = await getVisibleInstances(OWNER_ID, ctx.user.allowedHospitals);
+      const allInstances = await getVisibleInstances(OWNER_ID, userAllowedHospitals(ctx.user));
       const instanceIds = allInstances.map((i) => i.id);
 
       // Nomes das unidades ativas (fonte de verdade no banco; fallback HOSPITALS)

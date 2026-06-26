@@ -143,14 +143,28 @@ export async function getVisibleInstances(
 
 export async function getUnits(): Promise<Unit[]> {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(units).orderBy(units.name);
+  if (!db) {
+    console.warn("[getUnits] getDb() retornou null — DATABASE_URL ausente?");
+    return [];
+  }
+  try {
+    return await db.select().from(units).orderBy(units.name);
+  } catch (err) {
+    // LOG TEMPORÁRIO — ex.: tabela units inexistente / colunas divergentes
+    console.error("[getUnits] falha na query:", err);
+    throw err;
+  }
 }
 
 export async function getActiveUnits(): Promise<Unit[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(units).where(eq(units.active, true)).orderBy(units.name);
+  try {
+    return await db.select().from(units).where(eq(units.active, true)).orderBy(units.name);
+  } catch (err) {
+    console.error("[getActiveUnits] falha na query:", err);
+    throw err;
+  }
 }
 
 export async function createUnit(name: string, label: string): Promise<number> {
