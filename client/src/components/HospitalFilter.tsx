@@ -9,7 +9,6 @@
 import { useDateRange, type HospitalFilter } from "@/contexts/DateRangeContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { trpc } from "@/lib/trpc";
-import { FALLBACK_UNIT_OPTIONS } from "@/lib/hospitals";
 
 export function HospitalFilterButtons({ className = "" }: { className?: string }) {
   const { hospital, setHospital } = useDateRange();
@@ -19,8 +18,11 @@ export function HospitalFilterButtons({ className = "" }: { className?: string }
     refetchOnWindowFocus: false,
   });
 
-  // Fonte: unidades ativas do banco (fallback estático enquanto carrega).
-  const activeUnits = units && units.length ? units : FALLBACK_UNIT_OPTIONS;
+  // Fonte ÚNICA: unidades ativas vindas do banco. NÃO usamos o fallback estático
+  // aqui — ele incluiria unidades inativas (ex.: CRV). Enquanto a query não
+  // retorna, `visible` fica vazio e o filtro não renderiza. Filtro `active`
+  // defensivo caso a query um dia traga inativas.
+  const activeUnits = (units ?? []).filter((u) => u.active);
 
   // Cruza com as permissões do usuário (null = sem restrição → todas).
   const visible = allowedHospitals
@@ -43,7 +45,7 @@ export function HospitalFilterButtons({ className = "" }: { className?: string }
           <button
             key={opt.label}
             onClick={() => setHospital(opt.id)}
-            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+            className={`px-2.5 py-1 text-[11px] font-semibold rounded-md whitespace-nowrap transition-all ${
               active
                 ? "bg-[#11131F] text-white shadow-sm"
                 : "text-gray-500 hover:text-[#11131F] hover:bg-white/60"
