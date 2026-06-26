@@ -271,36 +271,44 @@ export default function Monitor() {
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
       <header className="flex-shrink-0 h-14 border-b border-border bg-card flex items-center px-5 gap-4">
-        <SougniLogo variant="full" size="sm" />
-        <span className="hidden md:inline text-xs text-muted-foreground border-l border-border pl-3 ml-1">
-          Painel de canais WhatsApp
-        </span>
-
-        <div className="flex-1" />
-
-        {/* Filtros globais — visíveis só nas telas que consomem */}
-        {(centerView === "dashboard" || centerView === "global") && !selectedInstance && (
-          <div className="flex items-center gap-2">
-            <DateRangePicker />
-            {centerView === "dashboard" && <HospitalFilterButtons />}
-          </div>
-        )}
-
-        <div className="flex items-center gap-3">
-          <StatusSummary instances={instances} />
-          <span className="text-xs text-muted-foreground hidden sm:block tabular">
-            Atualizado às {format(lastUpdated, "HH:mm:ss")}
+        {/* Esquerda: logo + nome */}
+        <div className="flex items-center flex-shrink-0">
+          <SougniLogo variant="full" size="sm" />
+          <span className="hidden lg:inline text-xs text-muted-foreground border-l border-border pl-3 ml-3">
+            Painel de canais WhatsApp
           </span>
-          <button
-            onClick={handleManualRefresh}
-            title="Atualizar agora"
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Centro: filtros globais — espaço reservado, não compete com a direita.
+            Visíveis só nas telas que consomem. */}
+        <div className="flex-1 flex items-center justify-center gap-2 min-w-0">
+          {(centerView === "dashboard" || centerView === "global") && !selectedInstance && (
+            <>
+              <DateRangePicker />
+              {centerView === "dashboard" && <HospitalFilterButtons />}
+            </>
+          )}
+        </div>
+
+        {/* Direita: status + ações */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Grupo de status — isolado dos botões do filtro por uma divisória */}
+          <div className="flex items-center gap-3 pr-3 border-r border-border">
+            <StatusSummary instances={instances} />
+            <span className="text-xs text-muted-foreground hidden xl:block tabular">
+              Atualizado às {format(lastUpdated, "HH:mm:ss")}
+            </span>
+            <button
+              onClick={handleManualRefresh}
+              title="Atualizar agora"
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Grupo de ações */}
+          <div className="flex items-center gap-1">
           {can("manageLabels") && (
             <button
               onClick={() => setShowLabels(true)}
@@ -353,6 +361,7 @@ export default function Monitor() {
             <LogOut className="w-3.5 h-3.5" />
             Sair
           </button>
+          </div>
         </div>
       </header>
 
