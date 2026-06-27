@@ -397,3 +397,27 @@ export const sheetsSyncLog = pgTable("sheets_sync_log", {
 });
 export type SheetsSyncLog = typeof sheetsSyncLog.$inferSelect;
 export type InsertSheetsSyncLog = typeof sheetsSyncLog.$inferInsert;
+
+// ─── webhook_logs ──────────────────────────────────────────────────────────────
+//
+// Registro opcional dos webhooks recebidos do WaboxApp (ativado por
+// WEBHOOK_LOG=true). Inserção em background; limpeza automática de 7 dias.
+export const webhookLogs = pgTable(
+  "webhook_logs",
+  {
+    id: serial("id").primaryKey(),
+    receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+    event: varchar("event", { length: 32 }),
+    instanceUid: varchar("instanceUid", { length: 64 }),
+    contactUid: varchar("contactUid", { length: 64 }),
+    contactName: varchar("contactName", { length: 256 }),
+    contactType: varchar("contactType", { length: 16 }),
+    rawPayload: text("rawPayload").notNull(),
+    createdAt: timestamp("createdAt").defaultNow(),
+  },
+  (t) => ({
+    receivedAtIdx: index("webhook_logs_receivedAt_idx").on(t.receivedAt),
+  })
+);
+export type WebhookLog = typeof webhookLogs.$inferSelect;
+export type InsertWebhookLog = typeof webhookLogs.$inferInsert;

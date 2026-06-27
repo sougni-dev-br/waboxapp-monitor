@@ -3,10 +3,11 @@
  * Abre 2 modais: gerenciar usuários e regras de automação.
  */
 import { useState, useRef, useEffect } from "react";
-import { ShieldCheck, Users, Zap, ChevronDown, Building2 } from "lucide-react";
+import { ShieldCheck, Users, Zap, ChevronDown, Building2, Radio } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { UsersManagerModal } from "./UsersManagerModal";
 import { UnitsManagerModal } from "./UnitsManagerModal";
+import { WebhookLogsModal } from "./WebhookLogsModal";
 import { AutomationRulesModal } from "./AutomationRulesModal";
 
 export function AdminMenu() {
@@ -14,6 +15,7 @@ export function AdminMenu() {
   const [open, setOpen] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
   const [showUnits, setShowUnits] = useState(false);
+  const [showWebhookLogs, setShowWebhookLogs] = useState(false);
   const [showAutomation, setShowAutomation] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -97,11 +99,29 @@ export function AdminMenu() {
               </p>
             </div>
           </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setShowWebhookLogs(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
+          >
+            <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
+              <Radio className="w-3.5 h-3.5 text-foreground/70" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium leading-tight">Webhook Logs</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                Webhooks recebidos do WaboxApp
+              </p>
+            </div>
+          </button>
         </div>
       )}
 
       <UsersManagerModal open={showUsers} onClose={() => setShowUsers(false)} />
       <UnitsManagerModal open={showUnits} onClose={() => setShowUnits(false)} />
+      <WebhookLogsModal open={showWebhookLogs} onClose={() => setShowWebhookLogs(false)} />
       <AutomationRulesModal open={showAutomation} onClose={() => setShowAutomation(false)} />
     </div>
   );

@@ -30,6 +30,8 @@ import {
   sheetsCustosRows,
   sheetsPipelineLeads,
   sheetsSyncLog,
+  webhookLogs,
+  type InsertWebhookLog,
 } from "../drizzle/schema";
 import { instanceHospital } from "./hospitalUtils";
 import { summarizeMediaRows, type MediaRow, type MediaFilter, type MediaInvestmentSummary } from "./mediaInvestment";
@@ -1968,4 +1970,48 @@ export async function getLatestSyncLog(): Promise<Array<typeof sheetsSyncLog.$in
     latest.push(r);
   }
   return latest;
+}
+
+// ─── Webhook logs ──────────────────────────────────────────────────────────────
+
+export async function insertWebhookLog(data: InsertWebhookLog): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(webhookLogs).values(data);
+}
+
+/** Remove logs com receivedAt anterior a `days` dias atrás. */
+export async function deleteOldWebhookLogs(days: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  await db.delete(webhookLogs).where(lte(webhookLogs.receivedAt, cutoff));
+}
+
+export async function getWebhookLogs(opts: { page: number; limit: number }): Promise<{
+  rows: Array<typeof webhookLogs.$inferSelect>;
+  total: number;
+}> {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+  const page = Math.max(1, opts.page);
+  const limit = Math.max(1, Math.min(200, opts.limit));
+  const offset = (page - 1) * limit;
+
+  const rows = await db
+    .select()
+    .from(webhookLogs)
+    .orderBy(desc(webhookLogs.receivedAt))
+    .limit(limit)
+    .offset(offset);
+
+  const [countRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(webhookLogs);
+  return { rows, total: Number(countRow?.count ?? 0) };
+}
+
+export async function getWebhookLogById(id: number): Promise<typeof webhookLogs.$inferSelect | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(webhookLogs).where(eq(webhookLogs.id, id)).limit(1);
+  return row ?? null;
 }

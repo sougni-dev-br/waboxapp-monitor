@@ -20,6 +20,8 @@ import {
   getInstanceByUid,
   getInstances,
   insertMessage,
+  insertWebhookLog,
+  deleteOldWebhookLogs,
   matchAllLabelsForMessages,
   upsertContact,
 } from "../db";
@@ -181,6 +183,22 @@ async function startServer() {
         console.warn("[Webhook] Instance not found:", instanceUid, "| Registered:", allInstances.map(i => i.uid));
         res.status(404).json({ error: "Instance not found", uid: instanceUid });
         return;
+      }
+
+      // Log opcional de webhooks (WEBHOOK_LOG=true) — em background, nunca bloqueia.
+      if (process.env.WEBHOOK_LOG === "true") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const b = body as any;
+        insertWebhookLog({
+          event: event ?? null,
+          instanceUid: instanceUid ?? null,
+          contactUid: b.contact?.uid ?? body["contact[uid]"] ?? null,
+          contactName: b.contact?.name ?? body["contact[name]"] ?? null,
+          contactType: b.contact?.type ?? body["contact[type]"] ?? null,
+          rawPayload: JSON.stringify(req.body),
+        })
+          .then(() => deleteOldWebhookLogs(7))
+          .catch(() => {});
       }
 
       if (event === "message") {

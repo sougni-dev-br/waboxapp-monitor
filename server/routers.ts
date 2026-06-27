@@ -38,6 +38,8 @@ import {
   getMediaInvestmentFromDb,
   getPipelineFromDb,
   getLatestSyncLog,
+  getWebhookLogs,
+  getWebhookLogById,
   getLabelRules,
   getLabels,
   getLeadsWithAggregatedText,
@@ -500,6 +502,37 @@ export const appRouter = router({
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: res.reason ?? "Não foi possível remover a unidade." });
         }
         return { success: true };
+      }),
+  }),
+
+  // ─── Webhook Logs (admin-only) ───────────────────────────────────────────────
+  webhookLogs: router({
+    /** Indica se o registro de webhooks está ativo (WEBHOOK_LOG=true). */
+    isEnabled: adminProcedure.query(() => {
+      return { enabled: process.env.WEBHOOK_LOG === "true" };
+    }),
+
+    list: adminProcedure
+      .input(z.object({
+        page: z.number().int().min(1).default(1),
+        limit: z.number().int().min(1).max(200).default(50),
+      }))
+      .query(async ({ input }) => {
+        const { rows, total } = await getWebhookLogs({ page: input.page, limit: input.limit });
+        return {
+          rows,
+          total,
+          page: input.page,
+          totalPages: Math.max(1, Math.ceil(total / input.limit)),
+        };
+      }),
+
+    get: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const row = await getWebhookLogById(input.id);
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Log não encontrado." });
+        return row;
       }),
   }),
 

@@ -185,7 +185,23 @@ export async function ensureAuthSchema(): Promise<void> {
     )
   `);
 
-  console.log("[migrate] Schema de auth + automation + units + sheets verificado");
+  // 6. Tabela webhook_logs (registro opcional de webhooks recebidos)
+  await step("webhook_logs", sql`
+    CREATE TABLE IF NOT EXISTS "webhook_logs" (
+      "id" serial PRIMARY KEY,
+      "receivedAt" timestamp DEFAULT now() NOT NULL,
+      "event" varchar(32),
+      "instanceUid" varchar(64),
+      "contactUid" varchar(64),
+      "contactName" varchar(256),
+      "contactType" varchar(16),
+      "rawPayload" text NOT NULL,
+      "createdAt" timestamp DEFAULT now()
+    )
+  `);
+  await step("webhook_logs_receivedAt_idx", sql`CREATE INDEX IF NOT EXISTS "webhook_logs_receivedAt_idx" ON "webhook_logs" ("receivedAt")`);
+
+  console.log("[migrate] Schema de auth + automation + units + sheets + webhook_logs verificado");
 
   // 3. Seed dos usuários iniciais (idempotente — só atualiza se não tiver passwordHash)
   for (const seed of SEED_USERS) {
