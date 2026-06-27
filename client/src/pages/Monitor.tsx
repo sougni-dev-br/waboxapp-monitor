@@ -10,8 +10,9 @@ import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { ConfigModal } from "@/components/ConfigModal";
 import { AddInstanceModal } from "@/components/AddInstanceModal";
 import { LabelsModal } from "@/components/LabelsModal";
+import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { GlobalContactsView } from "@/components/GlobalContactsView";
-import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut, Settings } from "lucide-react";
+import { BarChart2, MessageCircle, Tag, RefreshCw, Globe, LogOut, Settings, KeyRound } from "lucide-react";
 import { OperationalDashV2 as OperationalDash } from "@/components/OperationalDashV2";
 import { MidiaOnView } from "@/components/MidiaOnView";
 import { OperationCenter } from "@/components/OperationCenter";
@@ -66,6 +67,7 @@ export default function Monitor() {
   const [showConfig, setShowConfig] = useState(false);
   const [showAddInstance, setShowAddInstance] = useState(false);
   const [showLabels, setShowLabels] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const instanceStatusCache = useRef<Record<number, string>>({});
@@ -329,15 +331,23 @@ export default function Monitor() {
 
           {/* Identidade do user logado — só avatar; nome/role no tooltip */}
           {user && (
-            <div
-              className="flex items-center border-l border-border pl-3 ml-2"
-              title={`${user.name ?? user.username} · ${user.role === "admin" ? "Administrador" : "Usuário"}`}
-            >
-              <span
-                className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-foreground text-background text-[10px] font-bold uppercase"
+            <div className="flex items-center gap-1 border-l border-border pl-3 ml-2">
+              <button
+                type="button"
+                onClick={() => setShowChangePassword(true)}
+                title={`${user.name ?? user.username} · ${user.role === "admin" ? "Administrador" : "Usuário"} · Alterar senha`}
+                className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-foreground text-background text-[10px] font-bold uppercase hover:opacity-80 transition-opacity"
               >
                 {(user.name ?? user.username ?? "?").charAt(0)}
-              </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowChangePassword(true)}
+                title="Alterar senha"
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
@@ -463,6 +473,7 @@ export default function Monitor() {
         />
       )}
       <LabelsModal open={showLabels} onClose={() => setShowLabels(false)} />
+      <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
     </div>
   );
 }

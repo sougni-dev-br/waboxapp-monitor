@@ -230,6 +230,34 @@ export const appRouter = router({
       ctx.res.clearCookie("panel_session", { path: cookiePath });
       return { success: true } as const;
     }),
+
+    // Troca de senha do próprio usuário logado.
+    changePassword: protectedProcedure
+      .input(z.object({
+        currentPassword: z.string().min(1, "Senha atual obrigatória"),
+        newPassword: z.string().min(6, "Mínimo 6 caracteres").max(128),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await import("./db").then((m) => m.getDb());
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponível" });
+        const { users } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const [row] = await db
+          .select({ passwordHash: users.passwordHash })
+          .from(users)
+          .where(eq(users.id, ctx.user.id))
+          .limit(1);
+
+        const ok = await verifyPassword(input.currentPassword, row?.passwordHash ?? null);
+        if (!ok) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha atual incorreta" });
+        }
+
+        const passwordHash = await hashPassword(input.newPassword);
+        await db.update(users).set({ passwordHash }).where(eq(users.id, ctx.user.id));
+        return { success: true };
+      }),
   }),
 
   // ─── Admin (admin-only) ─────────────────────────────────────────────────────
